@@ -1,0 +1,33 @@
+export const lightTheme = {
+  bg: "#eef3f8",
+  panel: "rgba(255,255,255,0.92)",
+  panelSolid: "#ffffff",
+  sidebar: "#06285b",
+  sidebarDark: "#031c43",
+  primary: "#1658d1",
+  primaryDark: "#0f3f9f",
+  text: "#112143",
+  muted: "#6e7c97",
+  border: "#d7e0ec",
+  card: "#f9fbfd",
+  orange: "#ff7a1a",
+  success: "#14a44d",
+  danger: "#e53935",
+};
+
+export const darkTheme = {
+  bg: "#071426",
+  panel: "rgba(11,27,48,0.92)",
+  panelSolid: "#0c1d34",
+  sidebar: "#031226",
+  sidebarDark: "#020d1c",
+  primary: "#2f7bff",
+  primaryDark: "#1c5fd6",
+  text: "#ecf3ff",
+  muted: "#9fb1cc",
+  border: "#1f3558",
+  card: "#122743",
+  orange: "#ff9a3d",
+  success: "#27c56d",
+  danger: "#ff5d5d",
+};
