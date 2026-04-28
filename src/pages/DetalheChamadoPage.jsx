@@ -1,6 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase, getBadgeStyle } from "../App";
+
+const estacoes = [
+  "EBAP Aribiri",
+  "EBAP Comportas",
+  "EBAP Foz da Costa",
+  "EBAP Cobilândia",
+  "EBAP Laranja",
+  "EBAP Marinho",
+  "EBAP Sitio de Batalha",
+  "EBAP Bigossi",
+  "EBAP Canal da Costa",
+  "EBAP Marilândia",
+  "EBAP Guaranhus",
+];
+
+const statusOptions = ["Aberto", "Em andamento", "Aguardando compra", "Fechado"];
+const prioridades = ["Baixa", "Média", "Alta", "Crítica"];
+const criticidades = ["Baixa", "Média", "Alta", "Severa"];
+const impactos = ["Baixo", "Médio", "Alto"];
+const tiposFalha = ["Mecânica", "Elétrica", "Automação", "Vedação", "Operacional", "Outro"];
 
 export default function DetalheChamadoPage({
   styles,
@@ -9,857 +29,695 @@ export default function DetalheChamadoPage({
   usuario,
   carregarChamados,
 }) {
-  const navigate = useNavigate();
   const { id } = useParams();
+  const navigate = useNavigate();
 
+  const [chamado, setChamado] = useState(selecionado || null);
+  const [form, setForm] = useState(selecionado || {});
+  const [equipes, setEquipes] = useState([]);
   const [fotos, setFotos] = useState([]);
   const [comentarios, setComentarios] = useState([]);
-  const [historicoStatus, setHistoricoStatus] = useState([]);
-  const [novaFoto, setNovaFoto] = useState([]);
   const [comentario, setComentario] = useState("");
-  const [fotoAberta, setFotoAberta] = useState(null);
+  const [modalEdicao, setModalEdicao] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [mensagem, setMensagem] = useState("");
-  const [statusAtual, setStatusAtual] = useState(selecionado?.status || "Aberto");
+  const [fotoAberta, setFotoAberta] = useState(null);
 
-  const chamadoId = selecionado?.id || id;
   const isGestor = usuario?.perfil === "gestor";
-
-  const statusOptions = ["Aberto", "Em andamento", "Aguardando compra", "Fechado"];
+  const chamadoId = chamado?.id || selecionado?.id || id;
 
   useEffect(() => {
-    if (chamadoId) {
-      carregarFotos();
-      carregarComentarios();
-      carregarHistoricoStatus();
-      setStatusAtual(selecionado?.status || "Aberto");
-    }
-  }, [chamadoId, selecionado?.status]);
+    carregarDetalhes();
+  }, [chamadoId]);
 
-  function corStatus(status) {
-    if (status === "Aberto") return "#1e9bff";
-    if (status === "Em andamento") return "#ff9f1a";
-    if (status === "Aguardando compra") return "#a855f7";
-    if (status === "Fechado") return "#30d158";
-    return "#9ca3af";
+  async function carregarDetalhes() {
+    if (!supabase || !chamadoId) return;
+
+    const { data } = await supabase
+      .from("chamados")
+      .select("*")
+      .eq("id", chamadoId)
+      .single();
+
+    if (data) {
+      setChamado(data);
+      setForm(data);
+    }
+
+    carregarEquipes();
+    carregarFotos();
+    carregarComentarios();
   }
 
-  function extrairPathStorage(url) {
-    const marcador = "/anexos-chamados/";
-    const index = url.indexOf(marcador);
-    if (index === -1) return null;
-    return decodeURIComponent(url.substring(index + marcador.length));
+  async function carregarEquipes() {
+    const { data } = await supabase
+      .from("equipes")
+      .select("*")
+      .eq("ativo", true)
+      .order("nome", { ascending: true });
+
+    setEquipes(data || []);
   }
 
   async function carregarFotos() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("anexos_chamados")
       .select("*")
       .eq("chamado_id", chamadoId)
       .order("created_at", { ascending: false });
 
-    if (!error) setFotos(data || []);
+    setFotos(data || []);
   }
 
   async function carregarComentarios() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("comentarios_chamados")
       .select("*")
       .eq("chamado_id", chamadoId)
       .order("created_at", { ascending: true });
 
-    if (!error) setComentarios(data || []);
+    setComentarios(data || []);
   }
 
-  async function carregarHistoricoStatus() {
-    const { data, error } = await supabase
-      .from("historico_status_chamados")
-      .select("*")
-      .eq("chamado_id", chamadoId)
-      .order("created_at", { ascending: false });
-
-    if (!error) setHistoricoStatus(data || []);
+  function alterarCampo(campo, valor) {
+    setForm((atual) => ({ ...atual, [campo]: valor }));
   }
 
-  async function alterarStatus(novoStatus) {
-    if (novoStatus === statusAtual) return;
-
+  async function salvarEdicao() {
     setErro("");
     setMensagem("");
     setSalvando(true);
 
-    const statusAnterior = statusAtual;
+    const payload = {
+      solicitante: form.solicitante || "",
+      contato: form.contato || "",
+      localidade: form.localidade || "",
+      equipamento: form.equipamento || "",
+      tipo_falha: form.tipo_falha || "",
+      prioridade: form.prioridade || "",
+      criticidade: form.criticidade || "",
+      impacto: form.impacto || "",
+      tecnico: form.tecnico || "",
+      problema: form.problema || "",
+      status: form.status || "Aberto",
+      ultima_atualizacao: new Date().toLocaleString("pt-BR"),
+    };
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("chamados")
-      .update({
-        status: novoStatus,
-        ultima_atualizacao: new Date().toLocaleString("pt-BR"),
-        atualizacao: `Status alterado de ${statusAnterior} para ${novoStatus}`,
-      })
-      .eq("id", chamadoId);
+      .update(payload)
+      .eq("id", chamadoId)
+      .select()
+      .single();
 
     if (error) {
       console.error(error);
-      setErro("Não foi possível alterar o status.");
+      setErro("Erro ao salvar alterações.");
       setSalvando(false);
       return;
     }
 
-    await supabase.from("historico_status_chamados").insert({
-      chamado_id: chamadoId,
-      status_anterior: statusAnterior,
-      status_novo: novoStatus,
-      alterado_por: usuario?.nome || usuario?.login || "Sistema",
-      perfil: usuario?.perfil || "operador",
-    });
-
-    setStatusAtual(novoStatus);
-    setMensagem(`Status alterado para ${novoStatus}.`);
-    carregarHistoricoStatus();
+    setChamado(data);
+    setForm(data);
+    setModalEdicao(false);
+    setMensagem("Chamado atualizado com sucesso.");
 
     if (carregarChamados) carregarChamados();
 
     setSalvando(false);
   }
 
-  function selecionarNovasFotos(event) {
-    const arquivos = Array.from(event.target.files || []);
-
-    if (fotos.length + novaFoto.length + arquivos.length > 4) {
-      setErro("O limite é de 4 fotos por chamado.");
-      return;
-    }
-
-    setErro("");
-    setNovaFoto((atual) => [...atual, ...arquivos].slice(0, 4 - fotos.length));
-  }
-
-  function removerNovaFoto(index) {
-    setNovaFoto((atual) => atual.filter((_, i) => i !== index));
-  }
-
-  async function enviarNovasFotos() {
-    setErro("");
-    setMensagem("");
-
-    if (novaFoto.length === 0) {
-      setErro("Selecione pelo menos uma foto.");
-      return;
-    }
+  async function alterarStatus(novoStatus) {
+    if (!isGestor) return;
 
     setSalvando(true);
 
-    try {
-      for (const foto of novaFoto) {
-        const extensao = foto.name.split(".").pop();
-        const nomeArquivo = `${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2)}.${extensao}`;
+    const { data, error } = await supabase
+      .from("chamados")
+      .update({
+        status: novoStatus,
+        ultima_atualizacao: new Date().toLocaleString("pt-BR"),
+      })
+      .eq("id", chamadoId)
+      .select()
+      .single();
 
-        const path = `chamado-${chamadoId}/${nomeArquivo}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("anexos-chamados")
-          .upload(path, foto);
-
-        if (uploadError) throw uploadError;
-
-        const { data } = supabase.storage
-          .from("anexos-chamados")
-          .getPublicUrl(path);
-
-        const { error: insertError } = await supabase
-          .from("anexos_chamados")
-          .insert({
-            chamado_id: chamadoId,
-            nome_arquivo: foto.name,
-            url_arquivo: data.publicUrl,
-            criado_por: usuario?.nome || usuario?.login || "Sistema",
-          });
-
-        if (insertError) throw insertError;
-      }
-
-      await supabase
-        .from("chamados")
-        .update({ anexos: fotos.length + novaFoto.length })
-        .eq("id", chamadoId);
-
-      setNovaFoto([]);
-      setMensagem("Foto(s) adicionada(s) com sucesso.");
-      carregarFotos();
-
-      if (carregarChamados) carregarChamados();
-    } catch (error) {
+    if (error) {
       console.error(error);
-      setErro("Não foi possível enviar as fotos.");
+      setErro("Erro ao alterar status.");
+      setSalvando(false);
+      return;
     }
+
+    setChamado(data);
+    setForm(data);
+
+    if (carregarChamados) carregarChamados();
 
     setSalvando(false);
   }
 
   async function adicionarComentario() {
-    setErro("");
-    setMensagem("");
-
-    if (!comentario.trim()) {
-      setErro("Digite um comentário.");
-      return;
-    }
-
-    setSalvando(true);
+    if (!comentario.trim()) return;
 
     const { error } = await supabase.from("comentarios_chamados").insert({
       chamado_id: chamadoId,
-      comentario: comentario.trim(),
       autor: usuario?.nome || usuario?.login || "Sistema",
-      perfil: usuario?.perfil || "operador",
+      perfil: usuario?.perfil || "usuario",
+      comentario: comentario.trim(),
     });
 
     if (error) {
       console.error(error);
-      setErro("Não foi possível salvar o comentário.");
-      setSalvando(false);
+      setErro("Erro ao adicionar comentário.");
       return;
     }
 
-    await supabase
-      .from("chamados")
-      .update({
-        ultima_atualizacao: new Date().toLocaleString("pt-BR"),
-        atualizacao: comentario.trim(),
-      })
-      .eq("id", chamadoId);
-
     setComentario("");
-    setMensagem("Comentário adicionado com sucesso.");
     carregarComentarios();
-
-    if (carregarChamados) carregarChamados();
-
-    setSalvando(false);
   }
 
-  async function excluirFoto(foto) {
-    if (!isGestor) return;
-
-    const confirmar = confirm("Deseja excluir esta foto?");
-    if (!confirmar) return;
-
-    setErro("");
-    setMensagem("");
-
-    try {
-      const path = extrairPathStorage(foto.url_arquivo);
-
-      if (path) {
-        await supabase.storage.from("anexos-chamados").remove([path]);
-      }
-
-      const { error } = await supabase
-        .from("anexos_chamados")
-        .delete()
-        .eq("id", foto.id);
-
-      if (error) throw error;
-
-      await supabase
-        .from("chamados")
-        .update({ anexos: Math.max(fotos.length - 1, 0) })
-        .eq("id", chamadoId);
-
-      setMensagem("Foto excluída com sucesso.");
-      carregarFotos();
-
-      if (carregarChamados) carregarChamados();
-    } catch (error) {
-      console.error(error);
-      setErro("Não foi possível excluir a foto.");
-    }
-  }
-
-  async function excluirComentario(comentarioId) {
+  async function excluirComentario(idComentario) {
     if (!isGestor) return;
 
     const confirmar = confirm("Deseja excluir este comentário?");
     if (!confirmar) return;
 
-    setErro("");
-    setMensagem("");
-
     const { error } = await supabase
       .from("comentarios_chamados")
       .delete()
-      .eq("id", comentarioId);
+      .eq("id", idComentario);
 
     if (error) {
       console.error(error);
-      setErro("Não foi possível excluir o comentário.");
+      setErro("Erro ao excluir comentário.");
       return;
     }
 
-    setMensagem("Comentário excluído com sucesso.");
     carregarComentarios();
   }
 
-  async function excluirChamado() {
+  async function excluirFoto(foto) {
     if (!isGestor) return;
 
-    const confirmar = confirm(
-      "Tem certeza que deseja excluir este chamado? Essa ação não pode ser desfeita."
-    );
-
+    const confirmar = confirm("Deseja excluir esta imagem?");
     if (!confirmar) return;
 
-    setErro("");
-    setMensagem("");
-    setSalvando(true);
+    const { error } = await supabase
+      .from("anexos_chamados")
+      .delete()
+      .eq("id", foto.id);
 
-    try {
-      const { data: anexos } = await supabase
-        .from("anexos_chamados")
-        .select("*")
-        .eq("chamado_id", chamadoId);
-
-      const paths = (anexos || [])
-        .map((foto) => extrairPathStorage(foto.url_arquivo))
-        .filter(Boolean);
-
-      if (paths.length > 0) {
-        await supabase.storage.from("anexos-chamados").remove(paths);
-      }
-
-      await supabase
-        .from("comentarios_chamados")
-        .delete()
-        .eq("chamado_id", chamadoId);
-
-      await supabase
-        .from("anexos_chamados")
-        .delete()
-        .eq("chamado_id", chamadoId);
-
-      await supabase
-        .from("historico_status_chamados")
-        .delete()
-        .eq("chamado_id", chamadoId);
-
-      const { error } = await supabase
-        .from("chamados")
-        .delete()
-        .eq("id", chamadoId);
-
-      if (error) throw error;
-
-      if (carregarChamados) carregarChamados();
-
-      navigate("/chamados");
-    } catch (error) {
+    if (error) {
       console.error(error);
-      setErro("Não foi possível excluir o chamado.");
+      setErro("Erro ao excluir imagem.");
+      return;
     }
 
-    setSalvando(false);
+    carregarFotos();
   }
 
-  if (!selecionado || String(selecionado.id) !== String(id)) {
+  const dadosResumo = useMemo(
+    () => [
+      ["👤 Solicitante", chamado?.solicitante],
+      ["📞 Contato", chamado?.contato],
+      ["📍 Estação", chamado?.localidade],
+      ["⚙️ Equipamento", chamado?.equipamento],
+      ["🧩 Tipo de falha", chamado?.tipo_falha],
+      ["🚨 Criticidade", chamado?.criticidade],
+      ["📊 Impacto", chamado?.impacto],
+      ["👷 Equipe", chamado?.tecnico],
+    ],
+    [chamado]
+  );
+
+  if (!chamado) {
     return (
       <div style={styles.sectionCard}>
-        <div>Abra um chamado pela lista para visualizar os detalhes.</div>
-
-        <button
-          style={{ ...styles.secondaryButton, marginTop: 12 }}
-          onClick={() => navigate("/chamados")}
-        >
-          Voltar
+        <button style={styles.secondaryButton} onClick={() => navigate("/chamados")}>
+          ← Voltar
         </button>
+        <p style={{ marginTop: 20 }}>Chamado não encontrado.</p>
       </div>
     );
   }
 
   return (
     <div style={styles.sectionCard}>
+      <style>{`
+        .modal-edicao-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,.72);
+          z-index: 9999;
+          display: grid;
+          place-items: center;
+          padding: 24px;
+        }
+
+        .modal-edicao-card {
+          width: min(1100px, 96vw);
+          max-height: 92vh;
+          overflow: auto;
+          background: linear-gradient(180deg, #061a2f 0%, #020b16 100%);
+          border: 1px solid #1e6bb8;
+          border-radius: 26px;
+          padding: 24px;
+          color: white;
+          box-shadow: 0 30px 90px rgba(0,0,0,.55);
+        }
+
+        .status-workflow-btn {
+          transition: .2s ease;
+        }
+
+        .status-workflow-btn:hover {
+          transform: translateY(-2px);
+          filter: brightness(1.18);
+        }
+
+        .chat-area {
+          display: grid;
+          gap: 14px;
+          max-height: 520px;
+          overflow-y: auto;
+          padding-right: 6px;
+        }
+
+        .chat-bubble {
+          max-width: 76%;
+          padding: 14px 16px;
+          border-radius: 18px;
+          line-height: 1.5;
+          word-break: break-word;
+          border: 1px solid rgba(255,255,255,.09);
+        }
+
+        .chat-bubble.me {
+          margin-left: auto;
+          background: linear-gradient(135deg, #1658d1, #1e9bff);
+          color: white;
+          border-bottom-right-radius: 4px;
+        }
+
+        .chat-bubble.other {
+          margin-right: auto;
+          background: rgba(255,255,255,.06);
+          color: inherit;
+          border-bottom-left-radius: 4px;
+        }
+
+        .chat-meta {
+          font-size: 12px;
+          opacity: .78;
+          margin-bottom: 6px;
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+        }
+      `}</style>
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+        <button style={styles.secondaryButton} onClick={() => navigate("/chamados")}>
+          ← Voltar
+        </button>
+
+        {isGestor && (
+          <button
+            style={styles.primaryButton}
+            onClick={() => {
+              setForm(chamado);
+              setModalEdicao(true);
+            }}
+          >
+            ✏️ Editar chamado
+          </button>
+        )}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={styles.badgeRow}>
+          <span style={styles.badge}>{chamado.codigo || `CH-${chamado.id}`}</span>
+
+          <span style={{ ...styles.badge, ...getBadgeStyle(colors, "status", chamado.status) }}>
+            {chamado.status}
+          </span>
+
+          <span style={{ ...styles.badge, ...getBadgeStyle(colors, "prioridade", chamado.prioridade) }}>
+            {chamado.prioridade || "Sem prioridade"}
+          </span>
+        </div>
+
+        <h2 style={{ margin: "14px 0 4px", fontSize: 30 }}>
+          {chamado.equipamento || "Equipamento não informado"}
+        </h2>
+
+        <div style={{ color: colors.muted }}>
+          {chamado.localidade || "Sem localidade"} • {chamado.tecnico || "Sem equipe"}
+        </div>
+      </div>
+
+      {mensagem && (
+        <div style={{ ...styles.info, background: "#ecfff3", border: "1px solid #b7ecc8", color: "#0f7a34", marginTop: 16 }}>
+          {mensagem}
+        </div>
+      )}
+
+      {erro && (
+        <div style={{ ...styles.info, background: "#fff0f0", border: "1px solid #f3bbbb", color: colors.danger, marginTop: 16 }}>
+          {erro}
+        </div>
+      )}
+
+      {isGestor && (
+        <div style={{ marginTop: 24 }}>
+          <div style={styles.label}>🔄 Status do chamado</div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {statusOptions.map((status) => {
+              const ativo = normalizar(status) === normalizar(chamado.status);
+
+              return (
+                <button
+                  key={status}
+                  className="status-workflow-btn"
+                  style={{
+                    ...styles.secondaryButton,
+                    minHeight: 48,
+                    ...getBadgeStyle(colors, "status", status),
+                    fontWeight: 900,
+                    boxShadow: ativo ? "0 0 20px currentColor" : "none",
+                    opacity: ativo ? 1 : 0.72,
+                  }}
+                  onClick={() => alterarStatus(status)}
+                  disabled={salvando}
+                >
+                  {status}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 28 }}>
+        <div style={styles.label}>📋 Dados do chamado</div>
+
+        <div style={styles.formGrid}>
+          {dadosResumo.map(([label, valor]) => (
+            <div key={label} style={styles.softBox}>
+              <strong>{label}</strong>
+              <div style={{ color: colors.muted, marginTop: 6 }}>{valor || "-"}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <div style={styles.label}>📝 Problema / descrição</div>
+          <div style={styles.softBox}>{chamado.problema || "Sem descrição."}</div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <div style={styles.label}>📸 Imagens do chamado</div>
+
+        {fotos.length === 0 && <div style={styles.softBox}>Nenhuma imagem anexada.</div>}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
+          {fotos.map((foto) => (
+            <div key={foto.id} style={{ ...styles.softBox, padding: 8 }}>
+              <img
+                src={foto.url_arquivo}
+                alt={foto.nome_arquivo}
+                onClick={() => setFotoAberta(foto.url_arquivo)}
+                style={{
+                  width: "100%",
+                  height: 140,
+                  objectFit: "cover",
+                  borderRadius: 14,
+                  cursor: "pointer",
+                }}
+              />
+
+              <div style={{ fontSize: 12, color: colors.muted, marginTop: 8 }}>
+                {foto.nome_arquivo}
+              </div>
+
+              {isGestor && (
+                <button
+                  style={{ ...styles.dangerButton, minHeight: 40, marginTop: 8, width: "100%" }}
+                  onClick={() => excluirFoto(foto)}
+                >
+                  🗑️ Excluir
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <div style={styles.label}>💬 Chat do chamado</div>
+
+        <div style={{ ...styles.softBox, padding: 18 }}>
+          <div className="chat-area">
+            {comentarios.map((item) => {
+              const meuComentario =
+                item.autor === usuario?.nome || item.autor === usuario?.login;
+
+              return (
+                <div key={item.id} className={`chat-bubble ${meuComentario ? "me" : "other"}`}>
+                  <div className="chat-meta">
+                    <strong>{item.autor || "Sistema"}</strong>
+                    <span>
+                      {item.created_at
+                        ? new Date(item.created_at).toLocaleString("pt-BR")
+                        : ""}
+                    </span>
+                  </div>
+
+                  <div>{item.comentario}</div>
+
+                  {isGestor && (
+                    <button
+                      onClick={() => excluirComentario(item.id)}
+                      style={{
+                        marginTop: 10,
+                        border: "none",
+                        background: "rgba(255,255,255,.12)",
+                        color: "inherit",
+                        borderRadius: 10,
+                        padding: "6px 10px",
+                        cursor: "pointer",
+                        fontWeight: 800,
+                      }}
+                    >
+                      🗑️ Excluir
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {comentarios.length === 0 && (
+              <div style={{ color: colors.muted }}>Nenhuma mensagem no chamado.</div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
+            <input
+              style={{ ...styles.input, flex: 1, minWidth: 260 }}
+              placeholder="Digite uma mensagem..."
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") adicionarComentario();
+              }}
+            />
+
+            <button style={styles.primaryButton} onClick={adicionarComentario}>
+              Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {modalEdicao && (
+        <div className="modal-edicao-overlay">
+          <div className="modal-edicao-card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
+              <div>
+                <h2 style={{ margin: 0 }}>✏️ Editar chamado</h2>
+                <div style={{ color: "#9fb1cc", marginTop: 6 }}>
+                  Altere os dados do chamado selecionado.
+                </div>
+              </div>
+
+              <button
+                style={styles.dangerButton}
+                onClick={() => {
+                  setForm(chamado);
+                  setModalEdicao(false);
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div style={styles.formGrid}>
+              <Field label="Solicitante">
+                <input style={styles.input} value={form.solicitante || ""} onChange={(e) => alterarCampo("solicitante", e.target.value)} />
+              </Field>
+
+              <Field label="Contato">
+                <input style={styles.input} value={form.contato || ""} onChange={(e) => alterarCampo("contato", e.target.value)} />
+              </Field>
+
+              <Field label="Estação / Localidade">
+                <select style={styles.input} value={form.localidade || ""} onChange={(e) => alterarCampo("localidade", e.target.value)}>
+                  <option value="">Selecione</option>
+                  {estacoes.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Equipamento">
+                <input style={styles.input} value={form.equipamento || ""} onChange={(e) => alterarCampo("equipamento", e.target.value)} />
+              </Field>
+
+              <Field label="Tipo de falha">
+                <select style={styles.input} value={form.tipo_falha || ""} onChange={(e) => alterarCampo("tipo_falha", e.target.value)}>
+                  <option value="">Selecione</option>
+                  {tiposFalha.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Prioridade">
+                <select style={styles.input} value={form.prioridade || ""} onChange={(e) => alterarCampo("prioridade", e.target.value)}>
+                  <option value="">Selecione</option>
+                  {prioridades.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Criticidade">
+                <select style={styles.input} value={form.criticidade || ""} onChange={(e) => alterarCampo("criticidade", e.target.value)}>
+                  <option value="">Selecione</option>
+                  {criticidades.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Impacto">
+                <select style={styles.input} value={form.impacto || ""} onChange={(e) => alterarCampo("impacto", e.target.value)}>
+                  <option value="">Selecione</option>
+                  {impactos.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Equipe responsável">
+                <select style={styles.input} value={form.tecnico || ""} onChange={(e) => alterarCampo("tecnico", e.target.value)}>
+                  <option value="">Selecione</option>
+                  {equipes.map((item) => (
+                    <option key={item.id} value={item.nome}>{item.nome}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Status">
+                <select
+                  style={{
+                    ...styles.input,
+                    ...getBadgeStyle(colors, "status", form.status),
+                    fontWeight: 900,
+                  }}
+                  value={form.status || ""}
+                  onChange={(e) => alterarCampo("status", e.target.value)}
+                >
+                  {statusOptions.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <Field label="Problema / descrição">
+                <textarea
+                  style={styles.textarea}
+                  value={form.problema || ""}
+                  onChange={(e) => alterarCampo("problema", e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div style={{ marginTop: 22, display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <button style={styles.primaryButton} onClick={salvarEdicao} disabled={salvando}>
+                {salvando ? "Salvando..." : "💾 Salvar alterações"}
+              </button>
+
+              <button
+                style={styles.secondaryButton}
+                onClick={() => {
+                  setForm(chamado);
+                  setModalEdicao(false);
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {fotoAberta && (
         <div
           onClick={() => setFotoAberta(null)}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,.82)",
+            background: "rgba(0,0,0,.85)",
             zIndex: 9999,
             display: "grid",
             placeItems: "center",
-            padding: 20,
-            cursor: "zoom-out",
+            padding: 24,
           }}
         >
           <img
             src={fotoAberta}
-            alt="Foto ampliada"
+            alt="Imagem ampliada"
             style={{
               maxWidth: "95vw",
               maxHeight: "90vh",
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,.2)",
+              borderRadius: 18,
             }}
           />
         </div>
       )}
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "center",
-          flexWrap: "wrap",
-          marginBottom: 18,
-        }}
-      >
-        <div>
-          <div style={{ ...styles.label, marginBottom: 8 }}>
-            <span style={styles.labelIcon}>🧾</span>
-            <span>Detalhe do chamado</span>
-          </div>
-
-          <div style={{ color: colors.muted }}>
-            {selecionado.codigo} • {selecionado.localidade}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {isGestor && (
-            <button
-              style={styles.dangerButton}
-              onClick={excluirChamado}
-              disabled={salvando}
-            >
-              🗑️ Excluir chamado
-            </button>
-          )}
-
-          <button
-            style={styles.secondaryButton}
-            onClick={() => navigate("/chamados")}
-          >
-            ← Voltar
-          </button>
-        </div>
-      </div>
-
-      {mensagem && (
-        <div
-          style={{
-            ...styles.info,
-            background: "#ecfff3",
-            border: "1px solid #b7ecc8",
-            color: "#0f7a34",
-          }}
-        >
-          {mensagem}
-        </div>
-      )}
-
-      {erro && (
-        <div
-          style={{
-            ...styles.info,
-            background: "#fff0f0",
-            border: "1px solid #f3bbbb",
-            color: colors.danger,
-          }}
-        >
-          {erro}
-        </div>
-      )}
-
-      <div style={styles.badgeRow}>
-        <span style={{ ...styles.badge, fontWeight: 900 }}>
-          {selecionado.codigo}
-        </span>
-
-        <span
-          style={{
-            ...styles.badge,
-            borderColor: corStatus(statusAtual),
-            color: corStatus(statusAtual),
-            background: `${corStatus(statusAtual)}18`,
-          }}
-        >
-          {statusAtual}
-        </span>
-
-        <span
-          style={{
-            ...styles.badge,
-            ...getBadgeStyle(colors, "prioridade", selecionado.prioridade),
-          }}
-        >
-          {selecionado.prioridade}
-        </span>
-      </div>
-
-      <div style={{ marginTop: 16, marginBottom: 20 }}>
-        <div style={styles.label}>🔄 Status do Chamado</div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {statusOptions.map((status) => {
-            const ativo = statusAtual === status;
-            const cor = corStatus(status);
-
-            return (
-              <button
-                key={status}
-                type="button"
-                disabled={salvando || ativo}
-                onClick={() => alterarStatus(status)}
-                style={{
-                  border: `1px solid ${cor}`,
-                  background: ativo ? cor : "transparent",
-                  color: ativo ? "white" : cor,
-                  borderRadius: 999,
-                  padding: "12px 18px",
-                  fontWeight: 900,
-                  cursor: ativo ? "default" : "pointer",
-                  opacity: salvando ? 0.6 : 1,
-                  boxShadow: ativo ? `0 0 18px ${cor}55` : "none",
-                }}
-              >
-                {status}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={styles.softBox}>
-        <div style={{ fontWeight: 900, fontSize: 24 }}>
-          {selecionado.equipamento}
-        </div>
-
-        <div style={{ color: colors.muted, marginTop: 6 }}>
-          {selecionado.localidade} • {selecionado.tecnico || "Não atribuído"}
-        </div>
-
-        <div style={{ marginTop: 14 }}>{selecionado.problema}</div>
-      </div>
-
-      <div style={{ ...styles.softGrid, marginTop: 16 }}>
-        <div style={styles.softBox}>
-          <strong>Solicitante</strong>
-          <br />
-          {selecionado.solicitante || "Não informado"}
-        </div>
-
-        <div style={styles.softBox}>
-          <strong>Contato</strong>
-          <br />
-          {selecionado.contato || "Não informado"}
-        </div>
-
-        <div style={styles.softBox}>
-          <strong>Criticidade</strong>
-          <br />
-          {selecionado.criticidade || "Não informado"}
-        </div>
-
-        <div style={styles.softBox}>
-          <strong>Impacto</strong>
-          <br />
-          {selecionado.impacto || "Não informado"}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <div style={styles.label}>🕒 Histórico de status</div>
-
-        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          {historicoStatus.length === 0 && (
-            <div style={{ color: colors.muted }}>
-              Nenhuma alteração de status registrada.
-            </div>
-          )}
-
-          {historicoStatus.map((item) => (
-            <div key={item.id} style={styles.softBox}>
-              <div style={{ fontWeight: 900 }}>
-                <span style={{ color: corStatus(item.status_anterior) }}>
-                  {item.status_anterior || "Sem status"}
-                </span>
-                {" → "}
-                <span style={{ color: corStatus(item.status_novo) }}>
-                  {item.status_novo}
-                </span>
-              </div>
-
-              <div style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>
-                Alterado por {item.alterado_por || "Sistema"} •{" "}
-                {item.created_at
-                  ? new Date(item.created_at).toLocaleString("pt-BR")
-                  : ""}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <div style={styles.label}>📸 Fotos do chamado</div>
-
-        {fotos.length === 0 && (
-          <div style={{ color: colors.muted }}>Nenhuma foto anexada.</div>
-        )}
-
-        {fotos.length > 0 && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-              gap: 14,
-              marginTop: 12,
-            }}
-          >
-            {fotos.map((foto) => (
-              <div key={foto.id} style={{ position: "relative" }}>
-                <img
-                  src={foto.url_arquivo}
-                  alt={foto.nome_arquivo}
-                  onClick={() => setFotoAberta(foto.url_arquivo)}
-                  style={{
-                    width: "100%",
-                    height: 140,
-                    objectFit: "cover",
-                    borderRadius: 16,
-                    cursor: "zoom-in",
-                    border: `1px solid ${colors.border}`,
-                    boxShadow: "0 12px 26px rgba(0,0,0,.18)",
-                  }}
-                />
-
-                {isGestor && (
-                  <button
-                    type="button"
-                    onClick={() => excluirFoto(foto)}
-                    style={{
-                      position: "absolute",
-                      top: 8,
-                      right: 8,
-                      border: "none",
-                      borderRadius: 999,
-                      background: "#ff3131",
-                      color: "white",
-                      width: 30,
-                      height: 30,
-                      cursor: "pointer",
-                      fontWeight: 900,
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{ marginTop: 18 }}>
-          <input
-            id="input-novas-fotos"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            onChange={selecionarNovasFotos}
-            style={{ display: "none" }}
-          />
-
-          <button
-            type="button"
-            style={styles.secondaryButton}
-            onClick={() =>
-              document.getElementById("input-novas-fotos").click()
-            }
-            disabled={fotos.length >= 4}
-          >
-            📷 Adicionar foto
-          </button>
-
-          <span style={{ marginLeft: 12, color: colors.muted }}>
-            {fotos.length + novaFoto.length}/4 fotos
-          </span>
-        </div>
-
-        {novaFoto.length > 0 && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-              gap: 12,
-              marginTop: 14,
-            }}
-          >
-            {novaFoto.map((foto, index) => (
-              <div key={index} style={{ position: "relative" }}>
-                <img
-                  src={URL.createObjectURL(foto)}
-                  alt="Prévia"
-                  style={{
-                    width: "100%",
-                    height: 120,
-                    objectFit: "cover",
-                    borderRadius: 14,
-                    border: `1px solid ${colors.border}`,
-                  }}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => removerNovaFoto(index)}
-                  style={{
-                    position: "absolute",
-                    top: 6,
-                    right: 6,
-                    border: "none",
-                    borderRadius: 999,
-                    background: "#ff3131",
-                    color: "white",
-                    width: 28,
-                    height: 28,
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {novaFoto.length > 0 && (
-          <button
-            style={{ ...styles.primaryButton, marginTop: 14 }}
-            onClick={enviarNovasFotos}
-            disabled={salvando}
-          >
-            {salvando ? "Enviando..." : "Salvar novas fotos"}
-          </button>
-        )}
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <div style={styles.label}>💬 Conversa do chamado</div>
-
-        <textarea
-          style={styles.textarea}
-          placeholder="Digite um comentário..."
-          value={comentario}
-          onChange={(e) => setComentario(e.target.value)}
-        />
-
-        <button
-          style={{ ...styles.primaryButton, marginTop: 10 }}
-          onClick={adicionarComentario}
-          disabled={salvando}
-        >
-          {salvando ? "Salvando..." : "Enviar"}
-        </button>
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            marginTop: 20,
-          }}
-        >
-          {comentarios.length === 0 && (
-            <div style={{ color: colors.muted }}>Nenhum comentário ainda.</div>
-          )}
-
-          {comentarios.map((item) => {
-            const isMeu = item.autor === (usuario?.nome || usuario?.login);
-
-            const corPerfil =
-              item.perfil === "gestor"
-                ? "#8b5cf6"
-                : item.perfil === "tecnico"
-                ? "#22c55e"
-                : "#3b82f6";
-
-            return (
-              <div
-                key={item.id}
-                style={{
-                  display: "flex",
-                  justifyContent: isMeu ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "70%",
-                    padding: 12,
-                    borderRadius: 14,
-                    background: isMeu ? "#1e3a8a" : "#020617",
-                    border: `1px solid ${colors.border}`,
-                    position: "relative",
-                    color: "#fff",
-                  }}
-                >
-                  {isGestor && (
-                    <button
-                      type="button"
-                      onClick={() => excluirComentario(item.id)}
-                      style={{
-                        position: "absolute",
-                        top: 6,
-                        right: 6,
-                        background: "transparent",
-                        border: "none",
-                        color: "#ff4d4d",
-                        cursor: "pointer",
-                        fontSize: 18,
-                        fontWeight: 900,
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: corPerfil,
-                      marginBottom: 4,
-                      paddingRight: isGestor ? 22 : 0,
-                    }}
-                  >
-                    {item.autor || "Usuário"} • {item.perfil || "operador"}
-                  </div>
-
-                  <div>{item.comentario}</div>
-
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#9ca3af",
-                      marginTop: 6,
-                      textAlign: "right",
-                    }}
-                  >
-                    {item.created_at
-                      ? new Date(item.created_at).toLocaleString("pt-BR")
-                      : ""}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <div style={{ fontWeight: 900, marginBottom: 8 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function normalizar(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
