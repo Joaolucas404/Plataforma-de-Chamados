@@ -14,8 +14,6 @@ import {
   Cell,
   Legend,
   LabelList,
-  LineChart,
-  Line,
   CartesianGrid,
 } from "recharts";
 
@@ -28,11 +26,11 @@ function normalizar(texto) {
 
 function corPrioridade(nome) {
   const n = normalizar(nome);
-  if (n === "baixa") return "#22c55e";
+  if (n === "baixa") return "#30d158";
   if (n === "media") return "#facc15";
-  if (n === "alta") return "#f97316";
-  if (n === "critica" || n === "critico") return "#ef4444";
-  return "#64748b";
+  if (n === "alta") return "#ff9f1a";
+  if (n === "critica" || n === "critico") return "#ff3131";
+  return "#9ca3af";
 }
 
 function agrupar(lista, campo) {
@@ -41,53 +39,99 @@ function agrupar(lista, campo) {
     const chave = item[campo] || "Não informado";
     mapa[chave] = (mapa[chave] || 0) + 1;
   });
-  return Object.entries(mapa).map(([name, value]) => ({ name, value }));
+
+  return Object.entries(mapa)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 }
 
-function agruparPorMes(lista) {
-  const mapa = {};
-  lista.forEach((item) => {
-    const data = item.created_at ? new Date(item.created_at) : new Date();
-    const mes = data.toLocaleDateString("pt-BR", {
-      month: "short",
-      year: "2-digit",
-    });
-    mapa[mes] = (mapa[mes] || 0) + 1;
-  });
-  return Object.entries(mapa).map(([name, value]) => ({ name, value }));
+function TooltipDark() {
+  return (
+    <Tooltip
+      contentStyle={{
+        background: "#061a2f",
+        border: "1px solid #1e6bb8",
+        borderRadius: 12,
+        color: "#fff",
+        boxShadow: "0 0 20px rgba(30,155,255,.35)",
+      }}
+      labelStyle={{ color: "#9fb1cc" }}
+      itemStyle={{ color: "#fff" }}
+      cursor={{ fill: "rgba(30,155,255,0.08)" }}
+    />
+  );
 }
 
-function CardKpi({ titulo, valor, detalhe, cor = "#1e3a8a", escuro }) {
+function CardKpi({ titulo, valor, detalhe, cor = "#1e9bff" }) {
   return (
     <div
       style={{
         border: `1px solid ${cor}`,
-        background: escuro ? "#061a2f" : "#ffffff",
-        borderRadius: 14,
+        background: "#ffffff",
+        borderRadius: 16,
         padding: 16,
-        color: escuro ? "#ffffff" : "#0f172a",
+        color: "#0f172a",
       }}
     >
-      <div style={{ fontSize: 12, fontWeight: 900, color: escuro ? "#cbd5e1" : "#475569" }}>
+      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>
         {titulo}
       </div>
-      <div style={{ fontSize: 30, fontWeight: 900, color: cor }}>{valor}</div>
-      <div style={{ fontSize: 12, color: escuro ? "#94a3b8" : "#64748b" }}>{detalhe}</div>
+      <div style={{ fontSize: 32, fontWeight: 950, color: cor }}>{valor}</div>
+      <div style={{ fontSize: 12, color: "#64748b" }}>{detalhe}</div>
     </div>
   );
 }
 
-function ReportPage({ children, tema }) {
-  const escuro = tema === "escuro";
+function TextoResumo({ titulo, dados }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #cbd5e1",
+        borderRadius: 16,
+        padding: 18,
+        background: "#ffffff",
+      }}
+    >
+      <h3 style={{ marginTop: 0, color: "#0f2f5f" }}>{titulo}</h3>
 
+      {dados.length === 0 && (
+        <div style={{ color: "#64748b" }}>Nenhum dado encontrado.</div>
+      )}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {dados.map((item) => (
+          <div
+            key={item.name}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 16,
+              borderBottom: "1px solid #e2e8f0",
+              paddingBottom: 7,
+              color: "#334155",
+              fontSize: 16,
+            }}
+          >
+            <strong>{item.name}</strong>
+            <span>
+              {item.value} chamado{item.value > 1 ? "s" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReportPage({ children, pageNumber, totalPages }) {
   return (
     <div
       className="pdf-page"
       style={{
         width: 1123,
         minHeight: 794,
-        background: escuro ? "#020b16" : "#ffffff",
-        color: escuro ? "#ffffff" : "#0f172a",
+        background: "#ffffff",
+        color: "#0f172a",
         padding: 38,
         boxSizing: "border-box",
         fontFamily: "Arial, sans-serif",
@@ -95,6 +139,18 @@ function ReportPage({ children, tema }) {
       }}
     >
       {children}
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: 18,
+          right: 38,
+          color: "#64748b",
+          fontSize: 13,
+        }}
+      >
+        Página {pageNumber} de {totalPages}
+      </div>
     </div>
   );
 }
@@ -104,15 +160,14 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
   const [localidade, setLocalidade] = useState("todas");
   const [status, setStatus] = useState("todos");
   const [prioridade, setPrioridade] = useState("todas");
-  const [temaRelatorio, setTemaRelatorio] = useState("claro");
+  const [equipe, setEquipe] = useState("todas");
   const [previewAberto, setPreviewAberto] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState(false);
-
-  const escuro = temaRelatorio === "escuro";
 
   const localidades = [...new Set(tickets.map((t) => t.localidade).filter(Boolean))];
   const statusList = [...new Set(tickets.map((t) => t.status).filter(Boolean))];
   const prioridades = [...new Set(tickets.map((t) => t.prioridade).filter(Boolean))];
+  const equipes = [...new Set(tickets.map((t) => t.tecnico).filter(Boolean))];
 
   const filtrados = useMemo(() => {
     const hoje = new Date();
@@ -130,10 +185,11 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
       if (localidade !== "todas" && t.localidade !== localidade) return false;
       if (status !== "todos" && t.status !== status) return false;
       if (prioridade !== "todas" && t.prioridade !== prioridade) return false;
+      if (equipe !== "todas" && t.tecnico !== equipe) return false;
 
       return true;
     });
-  }, [tickets, periodo, localidade, status, prioridade]);
+  }, [tickets, periodo, localidade, status, prioridade, equipe]);
 
   const dados = useMemo(() => {
     const total = filtrados.length;
@@ -175,7 +231,6 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
       porStatus: agrupar(filtrados, "status"),
       porTipo: agrupar(filtrados, "tipo_falha"),
       porEquipe: agrupar(filtrados, "tecnico"),
-      porMes: agruparPorMes(filtrados),
     };
   }, [filtrados]);
 
@@ -186,17 +241,16 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
     setGerandoPdf(true);
 
     try {
-      setPreviewAberto(true);
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      const paginas = document.querySelectorAll(".pdf-page");
+      const paginas = document.querySelectorAll(".pdf-stage-hidden .pdf-page");
       const pdf = new jsPDF("landscape", "mm", "a4");
 
       for (let i = 0; i < paginas.length; i++) {
         const canvas = await html2canvas(paginas[i], {
           scale: 2,
           useCORS: true,
-          backgroundColor: escuro ? "#020b16" : "#ffffff",
+          backgroundColor: "#ffffff",
         });
 
         const imgData = canvas.toDataURL("image/png");
@@ -207,7 +261,9 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
         pdf.addImage(imgData, "PNG", 0, 0, largura, altura);
       }
 
-      pdf.save(`relatorio-executivo-${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(
+        `relatorio-executivo-${new Date().toISOString().slice(0, 10)}.pdf`
+      );
     } catch (error) {
       console.error(error);
       alert("Não foi possível gerar o PDF.");
@@ -216,40 +272,61 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
     setGerandoPdf(false);
   }
 
-  const corTexto = escuro ? "#ffffff" : "#0f172a";
-  const corTextoSec = escuro ? "#cbd5e1" : "#475569";
-  const corCard = escuro ? "#061a2f" : "#ffffff";
-  const corBorda = escuro ? "#1e6bb8" : "#cbd5e1";
-
   function RelatorioCompleto() {
+    const totalPaginas = 4;
+
     return (
       <>
-        <ReportPage tema={temaRelatorio}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-            <img src={LOGO_URL} alt="Logo" style={{ width: 170, background: "white", borderRadius: 8 }} />
+        <ReportPage pageNumber={1} totalPages={totalPaginas}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <img
+              src={LOGO_URL}
+              alt="Logo"
+              style={{ width: 170, background: "white", borderRadius: 8 }}
+            />
+
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: escuro ? "#93c5fd" : "#0f2f5f" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
                 RELATÓRIO EXECUTIVO
               </div>
-              <div style={{ color: corTextoSec, marginTop: 4 }}>Gestão de Chamados</div>
+              <div style={{ color: "#64748b", marginTop: 4 }}>
+                Gestão de Chamados
+              </div>
             </div>
           </div>
 
           <div style={{ marginTop: 70 }}>
-            <div style={{ fontSize: 46, fontWeight: 900, color: escuro ? "#ffffff" : "#0f2f5f", lineHeight: 1.1 }}>
-              RELATÓRIO ANALÍTICO<br />DE CHAMADOS
+            <div
+              style={{
+                fontSize: 46,
+                fontWeight: 900,
+                color: "#0f2f5f",
+                lineHeight: 1.1,
+              }}
+            >
+              RELATÓRIO ANALÍTICO
+              <br />
+              DE CHAMADOS
             </div>
 
-            <div style={{ marginTop: 22, width: 120, height: 5, background: "#1e9bff" }} />
+            <div
+              style={{
+                marginTop: 22,
+                width: 120,
+                height: 5,
+                background: "#1e9bff",
+              }}
+            />
 
-            <div style={{ marginTop: 24, fontSize: 20, color: corTexto }}>
+            <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
               Período: <strong>{periodoTexto}</strong>
             </div>
 
-            <div style={{ marginTop: 8, color: corTextoSec, fontSize: 16 }}>
+            <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
               Estação: {localidade === "todas" ? "Todas" : localidade} • Status:{" "}
               {status === "todos" ? "Todos" : status} • Prioridade:{" "}
-              {prioridade === "todas" ? "Todas" : prioridade}
+              {prioridade === "todas" ? "Todas" : prioridade} • Equipe:{" "}
+              {equipe === "todas" ? "Todas" : equipe}
             </div>
           </div>
 
@@ -258,44 +335,60 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
               position: "absolute",
               left: 38,
               right: 38,
-              bottom: 55,
+              bottom: 65,
               display: "grid",
               gridTemplateColumns: "repeat(5, 1fr)",
               gap: 16,
             }}
           >
-            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados filtrados" cor="#1e3a8a" escuro={escuro} />
-            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Em aberto" cor="#2563eb" escuro={escuro} />
-            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Concluídos" cor="#16a34a" escuro={escuro} />
-            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Alta atenção" cor="#dc2626" escuro={escuro} />
-            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendimento" cor="#7c3aed" escuro={escuro} />
+            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados filtrados" cor="#1e3a8a" />
+            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" />
+            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Concluídos" cor="#16a34a" />
+            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Alta atenção" cor="#dc2626" />
+            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" />
           </div>
 
-          <div style={{ position: "absolute", bottom: 20, right: 38, color: corTextoSec }}>
+          <div style={{ position: "absolute", bottom: 40, right: 38, color: "#64748b" }}>
             Gerado em {new Date().toLocaleString("pt-BR")}
           </div>
         </ReportPage>
 
-        <ReportPage tema={temaRelatorio}>
-          <h1 style={{ color: escuro ? "#93c5fd" : "#0f2f5f", margin: 0 }}>Sumário Executivo</h1>
-          <p style={{ color: corTextoSec, fontSize: 18, marginTop: 16, lineHeight: 1.6 }}>
-            Este relatório apresenta uma visão consolidada dos chamados registrados na plataforma,
-            considerando os filtros aplicados. O objetivo é apoiar a análise operacional, priorização
-            de atendimento, acompanhamento de SLA e tomada de decisão gerencial.
+        <ReportPage pageNumber={2} totalPages={totalPaginas}>
+          <h1 style={{ color: "#0f2f5f", margin: 0 }}>Sumário Executivo</h1>
+
+          <p style={{ color: "#475569", fontSize: 18, marginTop: 16, lineHeight: 1.6 }}>
+            Este relatório apresenta uma visão consolidada dos chamados registrados
+            na plataforma, considerando os filtros aplicados. O objetivo é apoiar
+            a análise operacional, priorização de atendimento, acompanhamento de SLA
+            e tomada de decisão gerencial.
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginTop: 32 }}>
-            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados" cor="#1e3a8a" escuro={escuro} />
-            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" escuro={escuro} />
-            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Finalizados" cor="#16a34a" escuro={escuro} />
-            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Atenção imediata" cor="#dc2626" escuro={escuro} />
-            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" escuro={escuro} />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 16,
+              marginTop: 32,
+            }}
+          >
+            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados" cor="#1e3a8a" />
+            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" />
+            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Finalizados" cor="#16a34a" />
+            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Atenção imediata" cor="#dc2626" />
+            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" />
           </div>
 
-          <div style={{ marginTop: 40, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
+          <div
+            style={{
+              marginTop: 40,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 26,
+            }}
+          >
             <div>
-              <h2 style={{ color: escuro ? "#93c5fd" : "#0f2f5f" }}>Resumo Operacional</h2>
-              <ul style={{ fontSize: 17, lineHeight: 1.8, color: corTextoSec }}>
+              <h2 style={{ color: "#0f2f5f" }}>Resumo Operacional</h2>
+              <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
                 <li>Taxa de resolução: {dados.taxaResolucao}%</li>
                 <li>Chamados em andamento: {dados.emAndamento}</li>
                 <li>Chamados críticos: {dados.criticos}</li>
@@ -304,107 +397,78 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
             </div>
 
             <div>
-              <h2 style={{ color: escuro ? "#93c5fd" : "#0f2f5f" }}>Filtros Aplicados</h2>
-              <ul style={{ fontSize: 17, lineHeight: 1.8, color: corTextoSec }}>
+              <h2 style={{ color: "#0f2f5f" }}>Filtros Aplicados</h2>
+              <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
                 <li>Período: {periodoTexto}</li>
                 <li>Estação: {localidade === "todas" ? "Todas" : localidade}</li>
                 <li>Status: {status === "todos" ? "Todos" : status}</li>
                 <li>Prioridade: {prioridade === "todas" ? "Todas" : prioridade}</li>
+                <li>Equipe: {equipe === "todas" ? "Todas" : equipe}</li>
               </ul>
             </div>
           </div>
 
-          <div style={{ position: "absolute", bottom: 20, left: 38, color: corTextoSec }}>
+          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
             Consórcio União OBRACON • Relatório Executivo
           </div>
         </ReportPage>
 
-        <ReportPage tema={temaRelatorio}>
-          <h1 style={{ color: escuro ? "#93c5fd" : "#0f2f5f", margin: 0 }}>Análise Gráfica</h1>
+        <ReportPage pageNumber={3} totalPages={totalPaginas}>
+          <h1 style={{ color: "#0f2f5f", margin: 0 }}>
+            Distribuição dos Chamados
+          </h1>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26, marginTop: 30 }}>
-            <div style={{ border: `1px solid ${corBorda}`, background: corCard, borderRadius: 14, padding: 16 }}>
-              <h3>Chamados por prioridade</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie data={dados.porPrioridade} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} label>
-                    {dados.porPrioridade.map((item, i) => (
-                      <Cell key={i} fill={corPrioridade(item.name)} />
-                    ))}
-                  </Pie>
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={{ border: `1px solid ${corBorda}`, background: corCard, borderRadius: 14, padding: 16 }}>
-              <h3>Chamados por estação</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={dados.porLocalidade}>
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Bar dataKey="value" fill="#2563eb">
-                    <LabelList dataKey="value" position="top" fill={escuro ? "#ffffff" : "#111827"} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={{ border: `1px solid ${corBorda}`, background: corCard, borderRadius: 14, padding: 16 }}>
-              <h3>Chamados por status</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={dados.porStatus}>
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Bar dataKey="value" fill="#16a34a">
-                    <LabelList dataKey="value" position="top" fill={escuro ? "#ffffff" : "#111827"} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={{ border: `1px solid ${corBorda}`, background: corCard, borderRadius: 14, padding: 16 }}>
-              <h3>Evolução mensal</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={dados.porMes}>
-                  <CartesianGrid stroke={escuro ? "#1e293b" : "#e2e8f0"} />
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Line type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 22,
+              marginTop: 28,
+            }}
+          >
+            <TextoResumo titulo="Chamados por estação" dados={dados.porLocalidade} />
+            <TextoResumo titulo="Chamados por equipe" dados={dados.porEquipe} />
+            <TextoResumo titulo="Chamados por status" dados={dados.porStatus} />
+            <TextoResumo titulo="Chamados por prioridade" dados={dados.porPrioridade} />
           </div>
 
-          <div style={{ position: "absolute", bottom: 20, left: 38, color: corTextoSec }}>
-            Documento pronto para impressão
+          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
+            Documento pronto para impressão • Dados organizados para leitura gerencial
           </div>
         </ReportPage>
 
-        <ReportPage tema={temaRelatorio}>
-          <h1 style={{ color: escuro ? "#93c5fd" : "#0f2f5f", margin: 0 }}>Conclusão Gerencial</h1>
+        <ReportPage pageNumber={4} totalPages={totalPaginas}>
+          <h1 style={{ color: "#0f2f5f", margin: 0 }}>Conclusão Gerencial</h1>
 
-          <div style={{ marginTop: 30, fontSize: 18, lineHeight: 1.7, color: corTextoSec }}>
+          <div style={{ marginTop: 30, fontSize: 18, lineHeight: 1.7, color: "#334155" }}>
             <p>
-              A base analisada contém <strong>{dados.total}</strong> chamados dentro dos filtros selecionados.
-              Deste total, <strong>{dados.abertos}</strong> permanecem em aberto e{" "}
-              <strong>{dados.fechados}</strong> encontram-se fechados.
+              A base analisada contém <strong>{dados.total}</strong> chamados dentro dos
+              filtros selecionados. Deste total, <strong>{dados.abertos}</strong> permanecem
+              em aberto e <strong>{dados.fechados}</strong> encontram-se fechados.
             </p>
 
             <p>
-              O índice de SLA atendido está em <strong>{dados.sla}%</strong>, enquanto a taxa de resolução
-              do período está em <strong>{dados.taxaResolucao}%</strong>.
+              O índice de SLA atendido está em <strong>{dados.sla}%</strong>, enquanto
+              a taxa de resolução do período está em <strong>{dados.taxaResolucao}%</strong>.
             </p>
 
             <p>
-              Foram identificados <strong>{dados.criticos}</strong> chamados classificados como críticos
-              ou severos, recomendando acompanhamento prioritário.
+              Foram identificados <strong>{dados.criticos}</strong> chamados classificados
+              como críticos ou severos, recomendando acompanhamento prioritário.
             </p>
           </div>
 
-          <div style={{ marginTop: 36, border: `1px solid ${corBorda}`, background: corCard, borderRadius: 14, padding: 20 }}>
-            <h2 style={{ color: escuro ? "#93c5fd" : "#0f2f5f", marginTop: 0 }}>Recomendações</h2>
-            <ul style={{ fontSize: 17, lineHeight: 1.8, color: corTextoSec }}>
+          <div
+            style={{
+              marginTop: 36,
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: 14,
+              padding: 20,
+            }}
+          >
+            <h2 style={{ color: "#0f2f5f", marginTop: 0 }}>Recomendações</h2>
+            <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
               <li>Monitorar chamados críticos diariamente.</li>
               <li>Acompanhar chamados em andamento e aguardando compra.</li>
               <li>Usar os dados por estação para identificar recorrências operacionais.</li>
@@ -412,7 +476,7 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
             </ul>
           </div>
 
-          <div style={{ position: "absolute", bottom: 20, left: 38, color: corTextoSec }}>
+          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
             Consórcio União OBRACON • Plataforma Corporativa de Chamados
           </div>
         </ReportPage>
@@ -425,7 +489,7 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
       <style>{`
         .analytics-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
           gap: 16px;
         }
 
@@ -436,6 +500,7 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
           padding: 16px;
           color: white;
           min-height: 310px;
+          box-shadow: 0 0 24px rgba(0,120,255,.10);
         }
 
         .analytics-card h3 {
@@ -476,7 +541,23 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
           width: 1123px;
           margin: 0 auto 26px;
           box-shadow: 0 20px 60px rgba(0,0,0,.45);
-          transform-origin: top center;
+        }
+
+        .recharts-default-tooltip {
+          background: #061a2f !important;
+          border: 1px solid #1e6bb8 !important;
+          border-radius: 12px !important;
+          color: white !important;
+          box-shadow: 0 0 20px rgba(30,155,255,.35) !important;
+        }
+
+        .recharts-legend-item-text {
+          color: #dce8f8 !important;
+        }
+
+        .recharts-text {
+          fill: #cfe8ff;
+          font-weight: 700;
         }
       `}</style>
 
@@ -494,7 +575,7 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
             📊 Analytics / Relatório Executivo
           </div>
           <div style={{ color: "#9fb1cc" }}>
-            Pré-visualize e baixe um relatório profissional com logo, capa, sumário e gráficos.
+            Pré-visualize e baixe um relatório profissional com logo, resumo e dados organizados.
           </div>
         </div>
 
@@ -541,9 +622,11 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
           ))}
         </select>
 
-        <select style={styles.input} value={temaRelatorio} onChange={(e) => setTemaRelatorio(e.target.value)}>
-          <option value="claro">Relatório claro</option>
-          <option value="escuro">Relatório escuro</option>
+        <select style={styles.input} value={equipe} onChange={(e) => setEquipe(e.target.value)}>
+          <option value="todas">Todas as equipes</option>
+          {equipes.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
         </select>
 
         <button style={styles.secondaryButton} onClick={() => setPreviewAberto(true)}>
@@ -575,12 +658,20 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
           <h3>Chamados por prioridade</h3>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={dados.porPrioridade} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} label>
+              <Pie
+                data={dados.porPrioridade}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={55}
+                outerRadius={90}
+                label
+                paddingAngle={4}
+              >
                 {dados.porPrioridade.map((item, i) => (
-                  <Cell key={i} fill={corPrioridade(item.name)} />
+                  <Cell key={i} fill={corPrioridade(item.name)} stroke="#020b16" strokeWidth={2} />
                 ))}
               </Pie>
-              <Tooltip />
+              <TooltipDark />
               <Legend />
             </PieChart>
           </ResponsiveContainer>
@@ -590,11 +681,12 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
           <h3>Chamados por estação</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={dados.porLocalidade}>
-              <XAxis dataKey="name" stroke="#9fb1cc" />
+              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="name" hide />
               <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <Tooltip />
+              <TooltipDark />
               <Bar dataKey="value" fill="#1e9bff" radius={[8, 8, 0, 0]}>
-                <LabelList dataKey="value" position="top" fill="#fff" />
+                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -604,26 +696,29 @@ export default function AnalyticsPage({ styles, tickets = [] }) {
           <h3>Chamados por status</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={dados.porStatus}>
-              <XAxis dataKey="name" stroke="#9fb1cc" />
+              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="name" hide />
               <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="value" fill="#22c55e" radius={[8, 8, 0, 0]}>
-                <LabelList dataKey="value" position="top" fill="#fff" />
+              <TooltipDark />
+              <Bar dataKey="value" fill="#30d158" radius={[8, 8, 0, 0]}>
+                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="analytics-card">
-          <h3>Evolução mensal</h3>
+          <h3>Chamados por equipe</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={dados.porMes}>
-              <CartesianGrid stroke="#12314d" />
-              <XAxis dataKey="name" stroke="#9fb1cc" />
+            <BarChart data={dados.porEquipe}>
+              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="name" hide />
               <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <Tooltip />
-              <Line type="monotone" dataKey="value" stroke="#22c7ff" strokeWidth={3} />
-            </LineChart>
+              <TooltipDark />
+              <Bar dataKey="value" fill="#ff9f1a" radius={[8, 8, 0, 0]}>
+                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>

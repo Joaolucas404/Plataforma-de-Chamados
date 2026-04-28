@@ -6,14 +6,12 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  CartesianGrid,
   PieChart,
   Pie,
   Cell,
   Legend,
   LabelList,
+  CartesianGrid,
 } from "recharts";
 
 function corPrioridade(nome) {
@@ -53,6 +51,7 @@ function KpiCard({ icon, titulo, valor, detalhe, cor, critical }) {
       style={{ borderColor: cor, boxShadow: `0 0 22px ${cor}33` }}
     >
       <div style={{ fontSize: 34 }}>{icon}</div>
+
       <div>
         <div className="dash-kpi-title">{titulo}</div>
         <div className="dash-kpi-value">{valor}</div>
@@ -115,28 +114,17 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
     const porEstacao = {};
     const porTipo = {};
     const porEquipe = {};
-    const porMes = {};
 
     tickets.forEach((t) => {
-      porPrioridade[t.prioridade || "Sem prioridade"] =
-        (porPrioridade[t.prioridade || "Sem prioridade"] || 0) + 1;
+      const prioridade = t.prioridade || "Sem prioridade";
+      const estacao = t.localidade || "Sem estação";
+      const tipo = t.tipo_falha || "Não informado";
+      const equipe = t.tecnico || "Não atribuído";
 
-      porEstacao[t.localidade || "Sem estação"] =
-        (porEstacao[t.localidade || "Sem estação"] || 0) + 1;
-
-      porTipo[t.tipo_falha || "Não informado"] =
-        (porTipo[t.tipo_falha || "Não informado"] || 0) + 1;
-
-      porEquipe[t.tecnico || "Não atribuído"] =
-        (porEquipe[t.tecnico || "Não atribuído"] || 0) + 1;
-
-      const data = t.created_at ? new Date(t.created_at) : new Date();
-      const mes = data.toLocaleDateString("pt-BR", {
-        month: "short",
-        year: "2-digit",
-      });
-
-      porMes[mes] = (porMes[mes] || 0) + 1;
+      porPrioridade[prioridade] = (porPrioridade[prioridade] || 0) + 1;
+      porEstacao[estacao] = (porEstacao[estacao] || 0) + 1;
+      porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+      porEquipe[equipe] = (porEquipe[equipe] || 0) + 1;
     });
 
     return {
@@ -154,16 +142,20 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
         name,
         value,
       })),
-      tipo: Object.entries(porTipo).map(([name, value]) => ({ name, value })),
+      tipo: Object.entries(porTipo).map(([name, value]) => ({
+        name,
+        value,
+      })),
       equipe: Object.entries(porEquipe).map(([name, value]) => ({
         name,
         value,
       })),
-      meses: Object.entries(porMes).map(([name, value]) => ({ name, value })),
     };
   }, [tickets]);
 
-  if (loading) return <div style={{ color: "white" }}>Carregando painel...</div>;
+  if (loading) {
+    return <div style={{ color: "white" }}>Carregando painel...</div>;
+  }
 
   return (
     <div className="dashboard">
@@ -209,7 +201,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 20px;
+          margin-bottom: 22px;
           gap: 16px;
           flex-wrap: wrap;
         }
@@ -219,6 +211,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           font-size: clamp(26px, 2.6vw, 38px);
           font-weight: 900;
           letter-spacing: 1px;
+          color: #fff;
         }
 
         .dash-subtitle {
@@ -238,9 +231,9 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
 
         .dash-grid-kpi {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          grid-template-columns: repeat(5, minmax(180px, 1fr));
           gap: 14px;
-          margin-bottom: 16px;
+          margin-bottom: 22px;
         }
 
         .dash-card {
@@ -270,11 +263,12 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
         .dash-kpi-value {
           font-size: 32px;
           font-weight: 900;
+          color: #fff;
         }
 
         .dash-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+          grid-template-columns: repeat(4, minmax(260px, 1fr));
           gap: 16px;
           align-items: start;
         }
@@ -284,7 +278,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           border: 1px solid #1e6bb8;
           border-radius: 16px;
           padding: 16px;
-          min-height: 310px;
+          min-height: 330px;
           animation: fadeIn .65s ease;
           transition: .25s ease;
           box-shadow: 0 0 24px rgba(0,120,255,.10);
@@ -323,6 +317,23 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           fill: #cfe8ff;
           font-weight: 700;
         }
+
+        @media (max-width: 1200px) {
+          .dash-grid-kpi {
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+          }
+
+          .dash-grid {
+            grid-template-columns: repeat(2, minmax(260px, 1fr));
+          }
+        }
+
+        @media (max-width: 768px) {
+          .dash-grid-kpi,
+          .dash-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
       <div className="dash-header">
@@ -351,6 +362,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           detalhe="operação ativa"
           cor="#1e9bff"
         />
+
         <KpiCard
           icon="⚙️"
           titulo="EM EXECUÇÃO"
@@ -358,6 +370,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           detalhe="em atendimento"
           cor="#ff9f1a"
         />
+
         <KpiCard
           icon="✅"
           titulo="FINALIZADOS"
@@ -365,6 +378,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           detalhe="histórico geral"
           cor="#30d158"
         />
+
         <KpiCard
           icon="🎯"
           titulo="SLA ATENDIDO"
@@ -372,6 +386,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           detalhe="dados reais"
           cor="#ff5c7a"
         />
+
         <KpiCard
           icon="🚨"
           titulo="CRÍTICOS"
@@ -405,11 +420,14 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
                     stroke="#020b16"
                     strokeWidth={2}
                     style={{
-                      filter: `drop-shadow(0 0 7px ${corPrioridade(item.name)}88)`,
+                      filter: `drop-shadow(0 0 7px ${corPrioridade(
+                        item.name
+                      )}88)`,
                     }}
                   />
                 ))}
               </Pie>
+
               <TooltipDark />
               <Legend />
             </PieChart>
@@ -420,7 +438,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={dados.estacao}>
               <CartesianGrid stroke="#12314d" />
-              <XAxis dataKey="name" stroke="#9fb1cc" />
+              <XAxis dataKey="name" tick={false} axisLine={false} />
               <YAxis stroke="#9fb1cc" allowDecimals={false} />
               <TooltipDark />
               <Bar
@@ -446,7 +464,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={dados.equipe}>
               <CartesianGrid stroke="#12314d" />
-              <XAxis dataKey="name" stroke="#9fb1cc" />
+              <XAxis dataKey="name" tick={false} axisLine={false} />
               <YAxis stroke="#9fb1cc" allowDecimals={false} />
               <TooltipDark />
               <Bar
@@ -472,7 +490,7 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={dados.tipo}>
               <CartesianGrid stroke="#12314d" />
-              <XAxis dataKey="name" stroke="#9fb1cc" />
+              <XAxis dataKey="name" tick={false} axisLine={false} />
               <YAxis stroke="#9fb1cc" allowDecimals={false} />
               <TooltipDark />
               <Bar
@@ -492,45 +510,6 @@ export default function PainelGerencialPage({ tickets = [], loading }) {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </Box>
-
-        <Box title="EVOLUÇÃO DE CHAMADOS">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={dados.meses}>
-              <CartesianGrid stroke="#12314d" />
-              <XAxis dataKey="name" stroke="#9fb1cc" />
-              <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <TooltipDark />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#22c7ff"
-                strokeWidth={3}
-                dot={{ r: 5, fill: "#22c7ff" }}
-                activeDot={{ r: 8 }}
-                animationDuration={1200}
-                style={{ filter: "drop-shadow(0 0 8px #22c7ff)" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </Box>
-
-        <Box title="INDICADORES ESTRATÉGICOS">
-          <KpiCard
-            icon="🎯"
-            titulo="SLA REAL"
-            valor={`${dados.slaAtendido}%`}
-            detalhe="calculado do banco"
-            cor="#30d158"
-          />
-          <div style={{ height: 12 }} />
-          <KpiCard
-            icon="📊"
-            titulo="TOTAL DE CHAMADOS"
-            valor={dados.total}
-            detalhe="base atual"
-            cor="#1e9bff"
-          />
         </Box>
       </div>
     </div>

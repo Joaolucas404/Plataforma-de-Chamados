@@ -50,68 +50,83 @@ export function podeGerenciarEquipes(perfil) {
 }
 
 export function getBadgeStyle(colors, type, value) {
+  const texto = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
   if (type === "status") {
-    if (value === "Encerrado" || value === "Concluído") {
+    if (texto === "aberto") {
       return {
-        background: "#eaf8ef",
-        color: "#0f7a34",
-        borderColor: "#bfe8cb",
+        background: "rgba(30,155,255,.15)",
+        color: "#1e9bff",
+        borderColor: "#1e9bff",
       };
     }
 
-    if (value === "Em andamento") {
+    if (texto === "em andamento" || texto === "em execucao") {
       return {
-        background: "#e8f0ff",
-        color: colors.primary,
-        borderColor: "#c7d8ff",
+        background: "rgba(255,159,26,.16)",
+        color: "#ff9f1a",
+        borderColor: "#ff9f1a",
       };
     }
 
-    if (value === "Aguardando peça") {
+    if (texto === "aguardando compra") {
       return {
-        background: "#f1ecff",
-        color: "#7a42d8",
-        borderColor: "#d8c9ff",
+        background: "rgba(168,85,247,.18)",
+        color: "#a855f7",
+        borderColor: "#a855f7",
       };
     }
 
-    return {
-      background: "#fff6db",
-      color: "#9a6800",
-      borderColor: "#ffe3a1",
-    };
+    if (texto === "fechado" || texto === "finalizado" || texto === "concluido") {
+      return {
+        background: "rgba(48,209,88,.16)",
+        color: "#30d158",
+        borderColor: "#30d158",
+      };
+    }
   }
 
   if (type === "prioridade") {
-    if (value === "Crítica") {
+    if (texto === "baixa") {
       return {
-        background: "#fdeaea",
-        color: colors.danger,
-        borderColor: "#f8c7c6",
+        background: "rgba(48,209,88,.16)",
+        color: "#30d158",
+        borderColor: "#30d158",
       };
     }
 
-    if (value === "Alta") {
+    if (texto === "media") {
       return {
-        background: "#fff0e5",
-        color: "#d96410",
-        borderColor: "#ffd5b6",
+        background: "rgba(250,204,21,.18)",
+        color: "#facc15",
+        borderColor: "#facc15",
       };
     }
 
-    if (value === "Média") {
+    if (texto === "alta") {
       return {
-        background: "#fff8df",
-        color: "#9f7700",
-        borderColor: "#f5df8f",
+        background: "rgba(255,159,26,.18)",
+        color: "#ff9f1a",
+        borderColor: "#ff9f1a",
+      };
+    }
+
+    if (texto === "critica" || texto === "critico") {
+      return {
+        background: "rgba(255,49,49,.18)",
+        color: "#ff3131",
+        borderColor: "#ff3131",
       };
     }
   }
 
   return {
-    background: colors.panelSolid,
-    color: colors.text,
-    borderColor: colors.border,
+    background: colors?.chip || "rgba(255,255,255,.08)",
+    color: colors?.text || "#ffffff",
+    borderColor: colors?.border || "rgba(255,255,255,.18)",
   };
 }
 
@@ -521,76 +536,306 @@ function buildStyles(colors, darkMode) {
 }
 
 function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles, colors }) {
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [entrando, setEntrando] = useState(false);
+
+  async function handleLogin() {
+    setEntrando(true);
+    await fazerLogin();
+    setEntrando(false);
+  }
+
   return (
-    <div style={styles.loginWrap}>
-      <div style={styles.loginCard}>
-        <img
-          src={LOGO_URL}
-          alt="Logo"
+    <div
+      style={{
+        minHeight: "100vh",
+        width: "100vw",
+        display: "grid",
+        placeItems: "center",
+        padding: 22,
+        boxSizing: "border-box",
+        background:
+          "radial-gradient(circle at top left, rgba(30,155,255,.35), transparent 34%), linear-gradient(135deg, #020b16 0%, #061a2f 45%, #020b16 100%)",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          width: 420,
+          height: 420,
+          borderRadius: "50%",
+          background: "rgba(30,155,255,.12)",
+          filter: "blur(70px)",
+          top: -120,
+          right: -100,
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          width: 360,
+          height: 360,
+          borderRadius: "50%",
+          background: "rgba(48,209,88,.08)",
+          filter: "blur(80px)",
+          bottom: -120,
+          left: -80,
+        }}
+      />
+
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 1080,
+          display: "grid",
+          gridTemplateColumns: "1fr 470px",
+          gap: 28,
+          alignItems: "center",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div style={{ color: "white", padding: 20 }}>
+          <img
+            src={LOGO_URL}
+            alt="Logo"
+            style={{
+              width: 220,
+              maxWidth: "100%",
+              background: "white",
+              borderRadius: 18,
+              padding: 8,
+              marginBottom: 28,
+            }}
+          />
+
+          <h1
+            style={{
+              fontSize: "clamp(34px, 4vw, 58px)",
+              lineHeight: 1.05,
+              margin: 0,
+              fontWeight: 950,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            Gestão inteligente de chamados operacionais
+          </h1>
+
+          <p
+            style={{
+              color: "#b8c7dc",
+              fontSize: 18,
+              lineHeight: 1.6,
+              maxWidth: 560,
+              marginTop: 20,
+            }}
+          >
+            Controle chamados, equipes, fotos, comentários, status e relatórios
+            em uma plataforma corporativa.
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 12,
+              marginTop: 28,
+              maxWidth: 560,
+            }}
+          >
+            {[
+              ["📊", "Dashboard"],
+              ["📸", "Fotos"],
+              ["🧾", "Relatórios"],
+            ].map(([icon, text]) => (
+              <div
+                key={text}
+                style={{
+                  border: "1px solid rgba(255,255,255,.12)",
+                  background: "rgba(255,255,255,.06)",
+                  borderRadius: 18,
+                  padding: 14,
+                  fontWeight: 900,
+                  color: "#e5f2ff",
+                }}
+              >
+                <div style={{ fontSize: 24 }}>{icon}</div>
+                <div style={{ marginTop: 6 }}>{text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div
           style={{
-            width: 220,
-            maxWidth: "100%",
-            display: "block",
-            margin: "0 auto 18px",
-            borderRadius: 14,
+            background: "rgba(255,255,255,.08)",
+            backdropFilter: "blur(22px)",
+            border: "1px solid rgba(255,255,255,.16)",
+            borderRadius: 30,
+            padding: 30,
+            boxShadow: "0 30px 80px rgba(0,0,0,.38)",
+            color: "white",
           }}
-        />
+        >
+          <div style={{ marginBottom: 24 }}>
+            <div
+              style={{
+                width: 58,
+                height: 58,
+                borderRadius: 18,
+                display: "grid",
+                placeItems: "center",
+                background: "linear-gradient(135deg, #1e9bff, #1658d1)",
+                fontSize: 28,
+                marginBottom: 16,
+                boxShadow: "0 0 30px rgba(30,155,255,.35)",
+              }}
+            >
+              🔐
+            </div>
 
-        <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, color: colors.text }}>
-          Central de chamados
-        </h1>
+            <h2 style={{ margin: 0, fontSize: 30, fontWeight: 950 }}>
+              Acessar sistema
+            </h2>
 
-        <p style={{ color: colors.muted, lineHeight: 1.6 }}>
-          Entre com seu login local do sistema.
-        </p>
+            <p style={{ color: "#9fb1cc", marginTop: 8, lineHeight: 1.5 }}>
+              Entre com seu login corporativo para continuar.
+            </p>
+          </div>
 
-        {mensagem && (
+          {mensagem && (
+            <div
+              style={{
+                ...styles.info,
+                background: "rgba(48,209,88,.14)",
+                border: "1px solid rgba(48,209,88,.35)",
+                color: "#7cffaa",
+              }}
+            >
+              {mensagem}
+            </div>
+          )}
+
+          {erro && (
+            <div
+              style={{
+                ...styles.info,
+                background: "rgba(255,49,49,.14)",
+                border: "1px solid rgba(255,49,49,.35)",
+                color: "#ff8b8b",
+              }}
+            >
+              {erro}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gap: 14 }}>
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>👤 Login</div>
+              <input
+                style={{
+                  ...styles.input,
+                  background: "rgba(2,11,22,.72)",
+                  color: "white",
+                  border: "1px solid rgba(255,255,255,.14)",
+                }}
+                placeholder="Digite seu login"
+                value={authForm.login}
+                onChange={(e) =>
+                  setAuthForm({ ...authForm, login: e.target.value })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleLogin();
+                }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>🔑 Senha</div>
+
+              <div style={{ position: "relative" }}>
+                <input
+                  type={mostrarSenha ? "text" : "password"}
+                  style={{
+                    ...styles.input,
+                    background: "rgba(2,11,22,.72)",
+                    color: "white",
+                    border: "1px solid rgba(255,255,255,.14)",
+                    paddingRight: 64,
+                  }}
+                  placeholder="Digite sua senha"
+                  value={authForm.senha}
+                  onChange={(e) =>
+                    setAuthForm({ ...authForm, senha: e.target.value })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleLogin();
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha((v) => !v)}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: 10,
+                    height: 42,
+                    width: 42,
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,.12)",
+                    background: "rgba(255,255,255,.08)",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: 18,
+                  }}
+                >
+                  {mostrarSenha ? "🙈" : "👁️"}
+                </button>
+              </div>
+            </div>
+
+            <button
+              style={{
+                ...styles.primaryButton,
+                width: "100%",
+                justifyContent: "center",
+                marginTop: 8,
+                opacity: entrando ? 0.75 : 1,
+                boxShadow: "0 18px 38px rgba(30,155,255,.28)",
+              }}
+              onClick={handleLogin}
+              disabled={entrando}
+            >
+              {entrando ? "Entrando..." : "🚀 Entrar no sistema"}
+            </button>
+          </div>
+
           <div
             style={{
-              ...styles.info,
-              background: "#ecfff3",
-              border: "1px solid #b7ecc8",
-              color: "#0f7a34",
+              marginTop: 22,
+              paddingTop: 18,
+              borderTop: "1px solid rgba(255,255,255,.10)",
+              color: "#9fb1cc",
+              fontSize: 13,
+              lineHeight: 1.5,
             }}
           >
-            {mensagem}
+            Ambiente seguro • Plataforma corporativa de chamados
           </div>
-        )}
-
-        {erro && (
-          <div
-            style={{
-              ...styles.info,
-              background: "#fff0f0",
-              border: "1px solid #f3bbbb",
-              color: colors.danger,
-            }}
-          >
-            {erro}
-          </div>
-        )}
-
-        <div style={{ display: "grid", gap: 12, marginTop: 20 }}>
-          <input
-            style={styles.input}
-            placeholder="Login"
-            value={authForm.login}
-            onChange={(e) => setAuthForm({ ...authForm, login: e.target.value })}
-          />
-
-          <input
-            type="password"
-            style={styles.input}
-            placeholder="Senha"
-            value={authForm.senha}
-            onChange={(e) => setAuthForm({ ...authForm, senha: e.target.value })}
-          />
-
-          <button style={styles.primaryButton} onClick={fazerLogin}>
-            Entrar no sistema
-          </button>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          div[style*="grid-template-columns: 1fr 470px"] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -636,13 +881,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const salvo = localStorage.getItem("usuario_sistema_logado");
+    const salvo = sessionStorage.getItem("usuario_sistema_logado");
 
     if (salvo) {
       try {
         setUsuario(JSON.parse(salvo));
       } catch {
-        localStorage.removeItem("usuario_sistema_logado");
+        sessionStorage.removeItem("usuario_sistema_logado");
       }
     }
 
@@ -742,12 +987,12 @@ export default function App() {
     }
 
     setUsuario(data);
-    localStorage.setItem("usuario_sistema_logado", JSON.stringify(data));
+    sessionStorage.setItem("usuario_sistema_logado", JSON.stringify(data));
     navigate("/painel", { replace: true });
   }
 
   function sair() {
-    localStorage.removeItem("usuario_sistema_logado");
+    sessionStorage.removeItem("usuario_sistema_logado");
     setUsuario(null);
     navigate("/login", { replace: true });
   }
