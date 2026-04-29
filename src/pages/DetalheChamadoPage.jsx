@@ -47,7 +47,25 @@ export default function DetalheChamadoPage({
   const isGestor = usuario?.perfil === "gestor";
   const chamadoId = chamado?.id || selecionado?.id || id;
 
-useEffect(() => {
+async function carregarDetalhes() {
+  if (!supabase || !chamadoId) return;
+
+  const { data } = await supabase
+    .from("chamados")
+    .select("*")
+    .eq("id", chamadoId)
+    .single();
+
+  if (data) {
+    setChamado(data);
+    setForm(data);
+  }
+
+  carregarComentarios();
+  carregarFotos();
+  carregarEquipes();
+}
+  useEffect(() => {
   carregarDetalhes();
 
   if (!chamadoId || !supabase) return;
