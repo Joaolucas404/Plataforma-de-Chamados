@@ -10,6 +10,7 @@ import DetalheChamadoPage from "./pages/DetalheChamadoPage";
 import OperadorPage from "./pages/OperadorPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AdminPage from "./pages/AdminPage";
+import FuncionariosPage from "./pages/FuncionariosPage";
 
 import { lightTheme, darkTheme } from "./theme";
 
@@ -33,13 +34,20 @@ export const statusOptions = [
 
 export const prioridadeOptions = ["Baixa", "Média", "Alta", "Crítica"];
 
-export const estacoes = [
+const estacoes = [
+  "EBAP Aribiri",
+  "EBAP Comportas",
   "EBAP Foz da Costa",
+  "EBAP Cobilândia",
+  "EBAP Laranja",
+  "EBAP Marinho",
+  "EBAP Sitio de Batalha",
+  "EBAP Bigossi",
+  "EBAP Canal da Costa",
   "EBAP Marilândia",
-  "EBAP Vila Nova",
-  "Cabine Primária",
-  "Eletrocentro Marilândia",
+  "EBAP Guaranhus",
 ];
+
 
 export function podeExportar(perfil) {
   return ["prefeitura", "gestor"].includes(perfil);
@@ -80,7 +88,12 @@ export function getBadgeStyle(colors, type, value) {
       };
     }
 
-    if (texto === "fechado" || texto === "finalizado" || texto === "concluido") {
+    if (
+      texto === "fechado" ||
+      texto === "finalizado" ||
+      texto === "concluido" ||
+      texto === "encerrado"
+    ) {
       return {
         background: "rgba(48,209,88,.16)",
         color: "#30d158",
@@ -201,7 +214,9 @@ function buildStyles(colors, darkMode) {
       color: "white",
       fontWeight: 800,
       cursor: "pointer",
-      border: active ? "1px solid rgba(255,255,255,0.15)" : "1px solid transparent",
+      border: active
+        ? "1px solid rgba(255,255,255,0.15)"
+        : "1px solid transparent",
       boxShadow: active ? "0 14px 28px rgba(22,88,209,0.32)" : "none",
       marginBottom: "8px",
       transition: "all .2s ease",
@@ -227,12 +242,12 @@ function buildStyles(colors, darkMode) {
       width: "100%",
     },
 
-   container: {
-     width: "100%",
-     maxWidth: "100%",   // 🔥 ESSENCIAL
-     margin: 0,          // 🔥 REMOVE centralização
-     padding: 0,
-     boxSizing: "border-box",
+    container: {
+      width: "100%",
+      maxWidth: "100%",
+      margin: 0,
+      padding: 0,
+      boxSizing: "border-box",
     },
 
     topCard: {
@@ -535,7 +550,7 @@ function buildStyles(colors, darkMode) {
   };
 }
 
-function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles, colors }) {
+function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles }) {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [entrando, setEntrando] = useState(false);
 
@@ -560,32 +575,6 @@ function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles
         overflow: "hidden",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          width: 420,
-          height: 420,
-          borderRadius: "50%",
-          background: "rgba(30,155,255,.12)",
-          filter: "blur(70px)",
-          top: -120,
-          right: -100,
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          width: 360,
-          height: 360,
-          borderRadius: "50%",
-          background: "rgba(48,209,88,.08)",
-          filter: "blur(80px)",
-          bottom: -120,
-          left: -80,
-        }}
-      />
-
       <div
         style={{
           width: "100%",
@@ -633,40 +622,8 @@ function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles
               marginTop: 20,
             }}
           >
-            Controle chamados, equipes, fotos, comentários, status e relatórios
-            em uma plataforma corporativa.
+            Controle chamados, equipes, fotos, comentários, status, funcionários e relatórios em uma plataforma corporativa.
           </p>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 12,
-              marginTop: 28,
-              maxWidth: 560,
-            }}
-          >
-            {[
-              ["📊", "Dashboard"],
-              ["📸", "Fotos"],
-              ["🧾", "Relatórios"],
-            ].map(([icon, text]) => (
-              <div
-                key={text}
-                style={{
-                  border: "1px solid rgba(255,255,255,.12)",
-                  background: "rgba(255,255,255,.06)",
-                  borderRadius: 18,
-                  padding: 14,
-                  fontWeight: 900,
-                  color: "#e5f2ff",
-                }}
-              >
-                <div style={{ fontSize: 24 }}>{icon}</div>
-                <div style={{ marginTop: 6 }}>{text}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div
@@ -691,7 +648,6 @@ function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles
                 background: "linear-gradient(135deg, #1e9bff, #1658d1)",
                 fontSize: 28,
                 marginBottom: 16,
-                boxShadow: "0 0 30px rgba(30,155,255,.35)",
               }}
             >
               🔐
@@ -805,26 +761,12 @@ function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles
                 justifyContent: "center",
                 marginTop: 8,
                 opacity: entrando ? 0.75 : 1,
-                boxShadow: "0 18px 38px rgba(30,155,255,.28)",
               }}
               onClick={handleLogin}
               disabled={entrando}
             >
               {entrando ? "Entrando..." : "🚀 Entrar no sistema"}
             </button>
-          </div>
-
-          <div
-            style={{
-              marginTop: 22,
-              paddingTop: 18,
-              borderTop: "1px solid rgba(255,255,255,.10)",
-              color: "#9fb1cc",
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
-            Ambiente seguro • Plataforma corporativa de chamados
           </div>
         </div>
       </div>
@@ -917,6 +859,7 @@ export default function App() {
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error(error);
       setErro("Erro ao carregar chamados.");
       setLoading(false);
       return;
@@ -1132,6 +1075,22 @@ export default function App() {
             />
           }
         />
+
+       
+         <Route
+  path="/funcionarios"
+  element={
+    usuario?.perfil === "gestor" ? (
+      <FuncionariosPage
+        styles={styles}
+        colors={colors}
+        usuario={usuario}
+      />
+    ) : (
+      <Navigate to="/painel" replace />
+    )
+  }
+/>
 
         <Route
           path="/admin"

@@ -1,82 +1,85 @@
-import React from "react";
-import { NavLink } from "react-router-dom";
-import { LOGO_URL, podeExportar, podeGerenciarEquipes } from "../App";
+import { useNavigate } from "react-router-dom";
 
-export default function Sidebar({ currentPath, usuario, styles, exportarChamados, sair }) {
-  const isActive = (path) => currentPath.startsWith(path);
+export default function Sidebar({
+  styles,
+  currentPath,
+  usuario,
+  sair,
+}) {
+  const navigate = useNavigate();
+
+  function Item({ path, icon, label }) {
+    const ativo = currentPath === path;
+
+    return (
+      <div
+        style={styles.sideItem(ativo)}
+        onClick={() => navigate(path)}
+      >
+        <span style={styles.sideIcon}>{icon}</span>
+        {label}
+      </div>
+    );
+  }
 
   return (
-    <>
+    <aside style={styles.sidebar}>
+      {/* LOGO */}
       <div style={styles.logoWrap}>
-        <img src={LOGO_URL} alt="Logo" style={styles.logo} />
+        <img
+          src="https://i.imgur.com/aAMds6C.jpeg"
+          alt="Logo"
+          style={styles.logo}
+        />
       </div>
 
-      <NavLink to="/painel" style={{ textDecoration: "none" }}>
-        <div style={styles.sideItem(isActive("/painel"))}>
-          <span style={styles.sideIcon}>📊</span>
-          <span>Visão Geral</span>
-        </div>
-      </NavLink>
+      {/* ======================== */}
+      {/* MENU PRINCIPAL */}
+      {/* ======================== */}
+      <div style={styles.sideSectionTitle}>Sistema</div>
 
-      <NavLink to="/abertura" style={{ textDecoration: "none" }}>
-        <div style={styles.sideItem(isActive("/abertura"))}>
-          <span style={styles.sideIcon}>📝</span>
-          <span>Abertura</span>
-        </div>
-      </NavLink>
+      <Item path="/painel" icon="📊" label="Painel" />
+      <Item path="/abertura" icon="📝" label="Abrir chamado" />
+      <Item path="/chamados" icon="📂" label="Chamados" />
+      <Item path="/analytics" icon="📈" label="Analytics" />
 
-      <NavLink to="/chamados" style={{ textDecoration: "none" }}>
-        <div style={styles.sideItem(isActive("/chamados"))}>
-          <span style={styles.sideIcon}>📂</span>
-          <span>Chamados</span>
-        </div>
-      </NavLink>
+      {/* ======================== */}
+      {/* ADMIN */}
+      {/* ======================== */}
+      {usuario?.perfil === "gestor" && (
+        <>
+          <div style={styles.sideSectionTitle}>Administração</div>
 
-      <NavLink to="/operador" style={{ textDecoration: "none" }}>
-        <div style={styles.sideItem(isActive("/operador"))}>
-          <span style={styles.sideIcon}>👤</span>
-          <span>Portal do operador</span>
-        </div>
-      </NavLink>
+          <Item path="/admin" icon="⚙️" label="Administração" />
 
-      {podeExportar(usuario?.perfil) && (
-        <NavLink to="/analytics" style={{ textDecoration: "none" }}>
-          <div style={styles.sideItem(isActive("/analytics"))}>
-            <span style={styles.sideIcon}>📈</span>
-            <span>Analytics</span>
-          </div>
-        </NavLink>
+          {/* NOVA PÁGINA */}
+          <Item path="/funcionarios" icon="👥" label="Funcionários" />
+        </>
       )}
 
-      {podeGerenciarEquipes(usuario?.perfil) && <div style={styles.sideSectionTitle}>Administração</div>}
-
-      {podeGerenciarEquipes(usuario?.perfil) && (
-        <NavLink to="/admin" style={{ textDecoration: "none" }}>
-          <div style={styles.sideItem(isActive("/admin"))}>
-            <span style={styles.sideIcon}>👥</span>
-            <span>Gerenciar acessos</span>
-          </div>
-        </NavLink>
-      )}
-
-      {podeExportar(usuario?.perfil) && (
-        <div style={styles.sideItem(false)} onClick={exportarChamados}>
-          <span style={styles.sideIcon}>⬇️</span>
-          <span>Exportar base</span>
-        </div>
-      )}
-
-      <div style={styles.sideItem(false)} onClick={sair}>
-        <span style={styles.sideIcon}>↩️</span>
-        <span>Sair</span>
-      </div>
-
+      {/* ======================== */}
+      {/* USUÁRIO */}
+      {/* ======================== */}
       <div style={styles.userCard}>
-        <div style={{ fontWeight: 800 }}>{usuario?.nome || usuario?.login}</div>
-        <div style={{ color: "rgba(255,255,255,0.72)", marginTop: 4, fontSize: 14 }}>
+        <div style={{ fontWeight: 900 }}>
+          {usuario?.nome || usuario?.login}
+        </div>
+
+        <div style={{ fontSize: 13, opacity: 0.7 }}>
           {usuario?.perfil}
         </div>
+
+        <button
+          style={{
+            ...styles.dangerButton,
+            width: "100%",
+            marginTop: 12,
+          }}
+          onClick={sair}
+        >
+          🚪 Sair
+        </button>
       </div>
-    </>
+    </aside>
   );
 }
