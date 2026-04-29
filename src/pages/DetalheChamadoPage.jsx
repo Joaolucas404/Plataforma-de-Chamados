@@ -20,7 +20,7 @@ const statusOptions = ["Aberto", "Em andamento", "Aguardando compra", "Fechado"]
 const prioridades = ["Baixa", "Média", "Alta", "Crítica"];
 const criticidades = ["Baixa", "Média", "Alta", "Severa"];
 const impactos = ["Baixo", "Médio", "Alto"];
-const tiposFalha = ["Mecânica", "Elétrica", "Automação", "Vedação", "Operacional", "Outro"];
+const tiposFalha = ["Mecânica", "Elétrica", "Automação", "Operacional", "Outro"];
 
 export default function DetalheChamadoPage({
   styles,
@@ -47,29 +47,35 @@ export default function DetalheChamadoPage({
   const isGestor = usuario?.perfil === "gestor";
   const chamadoId = chamado?.id || selecionado?.id || id;
 
-  useEffect(() => {
-    carregarDetalhes();
-  }, [chamadoId]);
+useEffect(() => {
+  carregarDetalhes();
 
-  async function carregarDetalhes() {
-    if (!supabase || !chamadoId) return;
+  if (!chamadoId || !supabase) return;
 
-    const { data } = await supabase
-      .from("chamados")
-      .select("*")
-      .eq("id", chamadoId)
-      .single();
+  const canal = supabase
+    .channel(`comentarios-chamado-${chamadoId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "comentarios_chamados",
+        filter: `chamado_id=eq.${chamadoId}`,
+      },
+      (payload) => {
+        setComentarios((atuais) => {
+          const existe = atuais.some((item) => item.id === payload.new.id);
+          if (existe) return atuais;
+          return [...atuais, payload.new];
+        });
+      }
+    )
+    .subscribe();
 
-    if (data) {
-      setChamado(data);
-      setForm(data);
-    }
-
-    carregarEquipes();
-    carregarFotos();
-    carregarComentarios();
-  }
-
+  return () => {
+    supabase.removeChannel(canal);
+  };
+}, [chamadoId]);
   async function carregarEquipes() {
     const { data } = await supabase
       .from("equipes")
