@@ -11,7 +11,7 @@ import OperadorPage from "./pages/OperadorPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AdminPage from "./pages/AdminPage";
 import FuncionariosPage from "./pages/FuncionariosPage";
-
+import FeriasPage from "./pages/FeriasPage";
 import { lightTheme, darkTheme } from "./theme";
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -156,26 +156,31 @@ function buildStyles(colors, darkMode) {
       overflowX: "hidden",
     },
 
-    shell: {
-      display: "grid",
-      gridTemplateColumns: "260px minmax(0, 1fr)",
-      minHeight: "100vh",
-      width: "100vw",
-    },
+ shell: {
+  display: "block",
+  minHeight: "100vh",
+  width: "100%",
+},
 
-    sidebar: {
-      background: `linear-gradient(180deg, ${colors.sidebar} 0%, ${colors.sidebarDark} 100%)`,
-      color: "white",
-      padding: "22px 16px",
-      display: "flex",
-      flexDirection: "column",
-      minWidth: 0,
-      position: "sticky",
-      top: 0,
-      height: "100vh",
-      zIndex: 5,
-      boxShadow: "12px 0 34px rgba(6,40,91,0.22)",
-    },
+  sidebar: {
+  background: `linear-gradient(180deg, ${colors.sidebar} 0%, ${colors.sidebarDark} 100%)`,
+  color: "white",
+  padding: "22px 16px",
+  display: "flex",
+  flexDirection: "column",
+  width: "230px",
+overflowY: "auto",
+scrollbarWidth: "none",
+  position: "fixed",
+  left: 0,
+  top: 0,
+  bottom: 0,
+
+  height: "100vh",
+
+  zIndex: 10,
+  boxShadow: "12px 0 34px rgba(6,40,91,0.25)",
+},
 
     logoWrap: {
       background: "rgba(255,255,255,0.05)",
@@ -236,11 +241,14 @@ function buildStyles(colors, darkMode) {
       border: "1px solid rgba(255,255,255,0.09)",
     },
 
-    main: {
-      padding: "24px 28px",
-      minWidth: 0,
-      width: "100%",
-    },
+ main: {
+  marginLeft: "230px",
+  padding: "14px 18px",
+  minHeight: "100vh",
+  transform: "scale(0.88)",
+  transformOrigin: "top left",
+  width: "113.6%",
+},
 
     container: {
       width: "100%",
@@ -1002,7 +1010,20 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/painel" replace />} />
         <Route path="/login" element={<Navigate to="/painel" replace />} />
-
+<Route
+  path="/ferias"
+  element={
+    usuario?.perfil === "gestor" ? (
+      <FeriasPage
+        styles={styles}
+        colors={colors}
+        usuario={usuario}
+      />
+    ) : (
+      <Navigate to="/painel" replace />
+    )
+  }
+/>
         <Route
           path="/painel"
           element={

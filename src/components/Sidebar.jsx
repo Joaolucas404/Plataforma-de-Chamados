@@ -54,6 +54,7 @@ export default function Sidebar({
 
           {/* NOVA PÁGINA */}
           <Item path="/funcionarios" icon="👥" label="Funcionários" />
+          <Item path="/ferias" icon="🏖️" label="Férias" />
         </>
       )}
 
