@@ -68,7 +68,7 @@ export default function Layout({
             {children}
 
             <div style={styles.footer}>
-              © 2025 Consórcio União OBRACON. Plataforma corporativa de chamados e manutenção.
+              © 2025 Consórcio UNIÃO OBRACON. Plataforma corporativa de chamados e manutenção.
             </div>
           </div>
         </main>

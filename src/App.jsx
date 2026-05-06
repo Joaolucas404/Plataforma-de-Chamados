@@ -13,6 +13,7 @@ import AdminPage from "./pages/AdminPage";
 import FuncionariosPage from "./pages/FuncionariosPage";
 import FeriasPage from "./pages/FeriasPage";
 import { lightTheme, darkTheme } from "./theme";
+import EquipamentosPage from "./pages/EquipamentosPage";
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -253,6 +254,7 @@ scrollbarWidth: "none",
     container: {
       width: "100%",
       maxWidth: "100%",
+
       margin: 0,
       padding: 0,
       boxSizing: "border-box",
@@ -1112,7 +1114,16 @@ export default function App() {
     )
   }
 />
-
+<Route
+  path="/equipamentos"
+  element={
+    <EquipamentosPage
+      styles={styles}
+      colors={colors}
+      usuario={usuario}
+    />
+  }
+/>
         <Route
           path="/admin"
           element={

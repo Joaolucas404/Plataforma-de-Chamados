@@ -41,6 +41,7 @@ export default function Sidebar({
       <Item path="/painel" icon="📊" label="Painel" />
       <Item path="/abertura" icon="📝" label="Abrir chamado" />
       <Item path="/chamados" icon="📂" label="Chamados" />
+      <Item path="/equipamentos" icon="⚙️" label="Equipamentos" />
       <Item path="/analytics" icon="📈" label="Analytics" />
 
       {/* ======================== */}
