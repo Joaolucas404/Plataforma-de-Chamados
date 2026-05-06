@@ -1,656 +1,123 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { LOGO_URL } from "../App";
 import {
-  Activity,
-  AlertTriangle,
-  Building2,
-  FileDown,
-  Gauge,
-  Save,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  LabelList,
+  CartesianGrid,
+} from "recharts";
 
-const LOGO_URL = "https://i.imgur.com/aAMds6C.jpeg";
+function normalizar(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
-const ebapsBase = [
-  "EBAP Aribiri",
-  "EBAP Comportas",
-  "EBAP Foz da Costa",
-  "EBAP Cobilândia",
-  "EBAP Laranja",
-  "EBAP Marinho",
-  "EBAP Sitio de Batalha",
-  "EBAP Bigossi",
-  "EBAP Canal da Costa",
-  "EBAP Marilândia",
-  "EBAP Guaranhus",
-];
+function corPrioridade(nome) {
+  const n = normalizar(nome);
+  if (n === "baixa") return "#30d158";
+  if (n === "media") return "#facc15";
+  if (n === "alta") return "#ff9f1a";
+  if (n === "critica" || n === "critico") return "#ff3131";
+  return "#9ca3af";
+}
 
-const statusConfig = {
-  operando: {
-    label: "Operando",
-    color: "#38e66b",
-    bg: "rgba(56,230,107,.12)",
-    border: "rgba(56,230,107,.45)",
-  },
-  atencao: {
-    label: "Atenção",
-    color: "#ffc83d",
-    bg: "rgba(255,200,61,.12)",
-    border: "rgba(255,200,61,.45)",
-  },
-  falha: {
-    label: "Falha",
-    color: "#ff5148",
-    bg: "rgba(255,81,72,.12)",
-    border: "rgba(255,81,72,.45)",
-  },
-};
+function agrupar(lista, campo) {
+  const mapa = {};
+  lista.forEach((item) => {
+    const chave = item[campo] || "Não informado";
+    mapa[chave] = (mapa[chave] || 0) + 1;
+  });
 
-function PumpIcon({ size = 58 }) {
+  return Object.entries(mapa)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function TooltipDark() {
   return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <path d="M32 10H48L52 18V30H28V18L32 10Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M30 30H50L56 42V58H24V42L30 30Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M22 58H58V68H22V58Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M28 68H52" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M36 10V5H44V10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M28 44H18C14 44 11 47 11 51V58" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M52 44H62C66 44 69 47 69 51V58" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-    </svg>
+    <Tooltip
+      contentStyle={{
+        background: "#061a2f",
+        border: "1px solid #1e6bb8",
+        borderRadius: 12,
+        color: "#fff",
+        boxShadow: "0 0 20px rgba(30,155,255,.35)",
+      }}
+      labelStyle={{ color: "#9fb1cc" }}
+      itemStyle={{ color: "#fff" }}
+      cursor={{ fill: "rgba(30,155,255,0.08)" }}
+    />
   );
 }
 
-function GateIcon({ size = 58 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <path d="M16 24H64" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M20 24V66H60V24" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
-      <path d="M28 32V62M40 32V62M52 32V62" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M24 62H56" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M26 16H54" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M34 8V16M46 8V16" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M24 62L56 24M56 62L24 24" stroke="currentColor" strokeWidth="3" opacity=".65" />
-    </svg>
-  );
-}
-
-function RakeIcon({ size = 58 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <path d="M18 18H62" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M20 18V62M28 18V62M36 18V62M44 18V62M52 18V62M60 18V62" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M14 62H66" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M16 68H64" stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity=".65" />
-      <path d="M22 62L18 70M30 62L26 70M38 62L34 70M46 62L42 70M54 62L50 70M62 62L58 70" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function criarEquipamentos(tipo, total, prefixo) {
-  return Array.from({ length: total }, (_, i) => ({
-    id: `${tipo}-${i + 1}`,
-    nome: `${prefixo} ${String(i + 1).padStart(2, "0")}`,
-    status: "operando",
-    observacao: "",
-  }));
-}
-
-const dadosIniciais = ebapsBase.map((nome, index) => ({
-  nome,
-  id: `EBAP-${String(index + 1).padStart(3, "0")}`,
-  bombas: criarEquipamentos("bomba", nome === "EBAP Foz da Costa" ? 8 : 2, "Bomba"),
-  rastelos: criarEquipamentos("rastelo", 1, "Rastelo"),
-  comportas: criarEquipamentos("comporta", 3, "Comporta"),
-}));
-
-function resumo(lista) {
-  const total = lista.length;
-  const operando = lista.filter((e) => e.status === "operando").length;
-  const atencao = lista.filter((e) => e.status === "atencao").length;
-  const falha = lista.filter((e) => e.status === "falha").length;
-
-  let status = "operando";
-  if (falha > 0) status = "falha";
-  else if (atencao > 0) status = "atencao";
-
-  return { total, operando, atencao, falha, status };
-}
-
-export default function EquipamentosPage() {
-  const [ebaps, setEbaps] = useState(dadosIniciais);
-  const [editando, setEditando] = useState(false);
-  const [modal, setModal] = useState(null);
-  const [gerandoPdf, setGerandoPdf] = useState(false);
-
-  const totais = useMemo(() => {
-    let operando = 0;
-    let atencao = 0;
-    let falha = 0;
-    let total = 0;
-
-    ebaps.forEach((ebap) => {
-      ["bombas", "rastelos", "comportas"].forEach((tipo) => {
-        const r = resumo(ebap[tipo]);
-        operando += r.operando;
-        atencao += r.atencao;
-        falha += r.falha;
-        total += r.total;
-      });
-    });
-
-    return { operando, atencao, falha, total };
-  }, [ebaps]);
-
-  async function exportarPDF() {
-    setGerandoPdf(true);
-    setModal(null);
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const paginas = document.querySelectorAll(".pdf-stage-hidden .pdf-page");
-      const pdf = new jsPDF("landscape", "mm", "a4");
-
-      for (let i = 0; i < paginas.length; i++) {
-        const canvas = await html2canvas(paginas[i], {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-        });
-
-        const imgData = canvas.toDataURL("image/png");
-        const largura = pdf.internal.pageSize.getWidth();
-        const altura = pdf.internal.pageSize.getHeight();
-
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, 0, largura, altura);
-      }
-
-      pdf.save(`relatorio-equipamentos-${new Date().toISOString().slice(0, 10)}.pdf`);
-    } catch (error) {
-      console.error(error);
-      alert("Não foi possível gerar o PDF.");
-    }
-
-    setGerandoPdf(false);
-  }
-
-  function alterarQuantidade(index, tipo, quantidade) {
-    const qtd = Math.max(0, Number(quantidade || 0));
-
-    setEbaps((prev) =>
-      prev.map((ebap, i) => {
-        if (i !== index) return ebap;
-
-        const prefixo =
-          tipo === "bombas" ? "Bomba" : tipo === "rastelos" ? "Rastelo" : "Comporta";
-
-        const atuais = ebap[tipo];
-
-        const novaLista =
-          qtd > atuais.length
-            ? [
-                ...atuais,
-                ...Array.from({ length: qtd - atuais.length }, (_, idx) => ({
-                  id: `${tipo}-${atuais.length + idx + 1}`,
-                  nome: `${prefixo} ${String(atuais.length + idx + 1).padStart(2, "0")}`,
-                  status: "operando",
-                  observacao: "",
-                })),
-              ]
-            : atuais.slice(0, qtd);
-
-        return { ...ebap, [tipo]: novaLista };
-      })
-    );
-  }
-
-  function alterarStatusEquipamento(ebapIndex, tipo, equipamentoId, status) {
-    setEbaps((prev) =>
-      prev.map((ebap, i) => {
-        if (i !== ebapIndex) return ebap;
-
-        return {
-          ...ebap,
-          [tipo]: ebap[tipo].map((eq) =>
-            eq.id === equipamentoId
-              ? {
-                  ...eq,
-                  status,
-                  observacao: status === "operando" ? "" : eq.observacao,
-                }
-              : eq
-          ),
-        };
-      })
-    );
-  }
-
-  function alterarObservacaoEquipamento(ebapIndex, tipo, equipamentoId, observacao) {
-    setEbaps((prev) =>
-      prev.map((ebap, i) => {
-        if (i !== ebapIndex) return ebap;
-
-        return {
-          ...ebap,
-          [tipo]: ebap[tipo].map((eq) =>
-            eq.id === equipamentoId ? { ...eq, observacao } : eq
-          ),
-        };
-      })
-    );
-  }
-
-  return (
-    <>
-      <style>{`
-        .pdf-stage-hidden {
-          position: absolute;
-          left: -99999px;
-          top: 0;
-          width: 1123px;
-          z-index: -1;
-        }
-      `}</style>
-
-      <div style={{ minHeight: "100vh", color: "#ecf3ff", fontFamily: "Inter, Arial, sans-serif" }}>
-        <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 950, margin: 0 }}>
-            Status de Equipamentos por EBAP
-          </h1>
-
-          <p style={{ color: "#9fb1cc", marginTop: 8 }}>
-            Relatório de bombas, rastelos e comportas por unidade operacional.
-          </p>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, minmax(180px, 1fr))",
-            gap: 16,
-            marginBottom: 22,
-          }}
-        >
-          <TopCard title="EBAPs" value={ebaps.length} icon={<Building2 />} />
-          <TopCard title="Total" value={totais.total} icon={<Gauge />} />
-          <TopCard title="Operando" value={totais.operando} color="#38e66b" icon={<Activity />} />
-          <TopCard title="Atenção" value={totais.atencao} color="#ffc83d" icon={<AlertTriangle />} />
-          <TopCard title="Falha" value={totais.falha} color="#ff5148" icon={<ShieldAlert />} />
-        </div>
-
-        <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-          <button
-            onClick={() => setEditando((v) => !v)}
-            style={{
-              background: editando
-                ? "linear-gradient(135deg, #14a44d, #0f7a34)"
-                : "linear-gradient(135deg, #2f7bff, #1658d1)",
-              color: "white",
-              border: "none",
-              borderRadius: 16,
-              padding: "14px 22px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <Save size={18} />
-            {editando ? "Salvar quantidades" : "Editar quantidades"}
-          </button>
-
-          <button
-            onClick={exportarPDF}
-            disabled={gerandoPdf}
-            style={{
-              background: "linear-gradient(135deg, #ff7a1a, #d85d00)",
-              color: "white",
-              border: "none",
-              borderRadius: 16,
-              padding: "14px 22px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              opacity: gerandoPdf ? 0.7 : 1,
-            }}
-          >
-            <FileDown size={18} />
-            {gerandoPdf ? "Gerando PDF..." : "Baixar PDF"}
-          </button>
-        </div>
-
-        <div
-          style={{
-            background: "rgba(8,22,43,.86)",
-            border: "1px solid rgba(130,170,220,.18)",
-            borderRadius: 24,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-              padding: "18px 22px",
-              background: "rgba(255,255,255,.035)",
-              color: "#b9c8df",
-              fontWeight: 900,
-              textTransform: "uppercase",
-              fontSize: 13,
-            }}
-          >
-            <div>EBAP</div>
-            <HeaderIcon icon={<PumpIcon size={34} />} label="Bombas" />
-            <HeaderIcon icon={<RakeIcon size={34} />} label="Rastelos" />
-            <HeaderIcon icon={<GateIcon size={34} />} label="Comportas" />
-          </div>
-
-          {ebaps.map((ebap, index) => (
-            <div
-              key={ebap.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-                gap: 14,
-                padding: 18,
-                borderTop: "1px solid rgba(130,170,220,.13)",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>{ebap.nome}</div>
-                <div style={{ color: "#7f91ad", fontSize: 13 }}>{ebap.id}</div>
-              </div>
-
-              <StatusCard
-                icon={<PumpIcon />}
-                lista={ebap.bombas}
-                editando={editando}
-                onQtdChange={(qtd) => alterarQuantidade(index, "bombas", qtd)}
-                onClick={() => setModal({ ebapIndex: index, tipo: "bombas", titulo: "Bombas" })}
-              />
-
-              <StatusCard
-                icon={<RakeIcon />}
-                lista={ebap.rastelos}
-                editando={editando}
-                onQtdChange={(qtd) => alterarQuantidade(index, "rastelos", qtd)}
-                onClick={() => setModal({ ebapIndex: index, tipo: "rastelos", titulo: "Rastelos" })}
-              />
-
-              <StatusCard
-                icon={<GateIcon />}
-                lista={ebap.comportas}
-                editando={editando}
-                onQtdChange={(qtd) => alterarQuantidade(index, "comportas", qtd)}
-                onClick={() => setModal({ ebapIndex: index, tipo: "comportas", titulo: "Comportas" })}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="pdf-stage-hidden">
-        <RelatorioCompleto ebaps={ebaps} totais={totais} />
-      </div>
-
-      {modal && (
-        <DetalhesModal
-          ebap={ebaps[modal.ebapIndex]}
-          tipo={modal.tipo}
-          titulo={modal.titulo}
-          onClose={() => setModal(null)}
-          onStatusChange={(equipamentoId, status) =>
-            alterarStatusEquipamento(modal.ebapIndex, modal.tipo, equipamentoId, status)
-          }
-          onObservacaoChange={(equipamentoId, observacao) =>
-            alterarObservacaoEquipamento(modal.ebapIndex, modal.tipo, equipamentoId, observacao)
-          }
-        />
-      )}
-    </>
-  );
-}
-
-function HeaderIcon({ icon, label }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-      <span style={{ color: "#8ea3bd", opacity: 0.8 }}>{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function StatusCard({ lista, icon, editando, onQtdChange, onClick }) {
-  const r = resumo(lista);
-  const cfg = statusConfig[r.status];
-
+function CardKpi({ titulo, valor, detalhe, cor = "#1e9bff" }) {
   return (
     <div
-      onClick={!editando ? onClick : undefined}
       style={{
-        background: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        borderRadius: 18,
-        padding: "18px 20px",
-        minHeight: 120,
-        cursor: editando ? "default" : "pointer",
-        boxShadow: `0 0 28px ${cfg.bg}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
+        border: `1px solid ${cor}`,
+        background: "#ffffff",
+        borderRadius: 16,
+        padding: 16,
+        color: "#0f172a",
       }}
     >
-      <div>
-        <div style={{ color: cfg.color, fontWeight: 900, fontSize: 18 }}>● {cfg.label}</div>
-
-        <div style={{ fontSize: 34, fontWeight: 950, marginTop: 8 }}>
-          {r.operando} / {r.total}
-        </div>
-
-        <div style={{ color: "#9fb1cc", fontSize: 12, marginTop: 4 }}>
-          {r.operando} operando | {r.atencao} atenção | {r.falha} falha
-        </div>
-
-        {editando && (
-          <input
-            type="number"
-            min="0"
-            value={r.total}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onQtdChange(e.target.value)}
-            style={{
-              marginTop: 12,
-              width: 90,
-              height: 38,
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,.18)",
-              background: "rgba(0,0,0,.25)",
-              color: "white",
-              padding: "0 12px",
-              fontWeight: 900,
-            }}
-          />
-        )}
+      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>
+        {titulo}
       </div>
-
-      <div style={{ opacity: 0.42, width: 66, height: 66, display: "grid", placeItems: "center", color: "#d7e8ff" }}>
-        {icon}
-      </div>
+      <div style={{ fontSize: 32, fontWeight: 950, color: cor }}>{valor}</div>
+      <div style={{ fontSize: 12, color: "#64748b" }}>{detalhe}</div>
     </div>
   );
 }
 
-function TopCard({ title, value, icon, color = "#2f9bff" }) {
+function TextoResumo({ titulo, dados }) {
   return (
     <div
       style={{
-        background: "rgba(9,25,48,.82)",
-        border: "1px solid rgba(130,170,220,.18)",
-        borderRadius: 20,
+        border: "1px solid #cbd5e1",
+        borderRadius: 16,
         padding: 18,
+        background: "#ffffff",
       }}
     >
-      <div style={{ color, marginBottom: 10 }}>{icon}</div>
-      <div style={{ color: "#9fb1cc", fontSize: 13 }}>{title}</div>
-      <div style={{ fontSize: 30, fontWeight: 950 }}>{value}</div>
-    </div>
-  );
-}
+      <h3 style={{ marginTop: 0, color: "#0f2f5f" }}>{titulo}</h3>
 
-function DetalhesModal({ ebap, tipo, titulo, onClose, onStatusChange, onObservacaoChange }) {
-  const lista = ebap[tipo];
-  const modalRef = useRef(null);
+      {dados.length === 0 && (
+        <div style={{ color: "#64748b" }}>Nenhum dado encontrado.</div>
+      )}
 
-  useEffect(() => {
-    function handleEsc(e) {
-      if (e.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", handleEsc);
-
-    setTimeout(() => {
-      modalRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 80);
-
-    return () => {
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,.72)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        overflowY: "auto",
-        zIndex: 9999,
-        padding: 24,
-      }}
-    >
-      <div
-        ref={modalRef}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "min(920px, calc(100vw - 40px))",
-          maxHeight: "86vh",
-          overflow: "auto",
-          background: "linear-gradient(180deg, #071b32, #04101f)",
-          border: "1px solid rgba(130,170,220,.25)",
-          borderRadius: 26,
-          padding: 24,
-          color: "white",
-          boxShadow: "0 30px 100px rgba(0,0,0,.55)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 22 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 28, fontWeight: 950 }}>
-              {titulo} - {ebap.nome}
-            </h2>
-
-            <p style={{ margin: "8px 0 0", color: "#9fb1cc" }}>
-              Lista individual dos equipamentos da unidade.
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
+      <div style={{ display: "grid", gap: 8 }}>
+        {dados.map((item) => (
+          <div
+            key={item.name}
             style={{
-              width: 46,
-              height: 46,
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,.14)",
-              background: "rgba(255,255,255,.08)",
-              color: "white",
-              cursor: "pointer",
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 16,
+              borderBottom: "1px solid #e2e8f0",
+              paddingBottom: 7,
+              color: "#334155",
+              fontSize: 16,
             }}
           >
-            <X />
-          </button>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
-          {lista.map((eq) => {
-            const cfg = statusConfig[eq.status];
-
-            return (
-              <div
-                key={eq.id}
-                style={{
-                  background: cfg.bg,
-                  border: `1px solid ${cfg.border}`,
-                  borderRadius: 18,
-                  padding: 16,
-                }}
-              >
-                <div style={{ fontSize: 18, fontWeight: 950 }}>{eq.nome}</div>
-
-                <div style={{ marginTop: 8, color: cfg.color, fontWeight: 900 }}>
-                  ● {cfg.label}
-                </div>
-
-                <select
-                  value={eq.status}
-                  onChange={(e) => onStatusChange(eq.id, e.target.value)}
-                  style={{
-                    marginTop: 14,
-                    width: "100%",
-                    height: 42,
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,.16)",
-                    background: "#071426",
-                    color: "white",
-                    padding: "0 12px",
-                    fontWeight: 800,
-                  }}
-                >
-                  <option value="operando">🟢 Operando</option>
-                  <option value="atencao">🟡 Atenção</option>
-                  <option value="falha">🔴 Falha</option>
-                </select>
-
-                {eq.status !== "operando" && (
-                  <textarea
-                    value={eq.observacao || ""}
-                    onChange={(e) => onObservacaoChange(eq.id, e.target.value)}
-                    placeholder="Resumo da falha ou observação..."
-                    style={{
-                      marginTop: 12,
-                      width: "100%",
-                      minHeight: 72,
-                      resize: "none",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,.16)",
-                      background: "rgba(0,0,0,.22)",
-                      color: "white",
-                      padding: 12,
-                      fontSize: 13,
-                      outline: "none",
-                      boxSizing: "border-box",
-                      fontFamily: "inherit",
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
+            <strong>{item.name}</strong>
+            <span>
+              {item.value} chamado{item.value > 1 ? "s" : ""}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -688,179 +155,595 @@ function ReportPage({ children, pageNumber, totalPages }) {
   );
 }
 
-function RelatorioCompleto({ ebaps, totais }) {
-  const totalPaginas = 2;
+export default function AnalyticsPage({ styles, tickets = [] }) {
+  const [periodo, setPeriodo] = useState("todos");
+  const [localidade, setLocalidade] = useState("todas");
+  const [status, setStatus] = useState("todos");
+  const [prioridade, setPrioridade] = useState("todas");
+  const [equipe, setEquipe] = useState("todas");
+  const [previewAberto, setPreviewAberto] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
-  return (
-    <>
-      <ReportPage pageNumber={1} totalPages={totalPaginas}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <img
-            src={LOGO_URL}
-            alt="Logo"
-            style={{ width: 160, background: "white", borderRadius: 8 }}
-          />
+  const localidades = [...new Set(tickets.map((t) => t.localidade).filter(Boolean))];
+  const statusList = [...new Set(tickets.map((t) => t.status).filter(Boolean))];
+  const prioridades = [...new Set(tickets.map((t) => t.prioridade).filter(Boolean))];
+  const equipes = [...new Set(tickets.map((t) => t.tecnico).filter(Boolean))];
 
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
-              RELATÓRIO OPERACIONAL
-            </div>
-            <div style={{ color: "#64748b", marginTop: 4 }}>
-              Status de Equipamentos por EBAP
+  const filtrados = useMemo(() => {
+    const hoje = new Date();
+
+    return tickets.filter((t) => {
+      const dataChamado = t.created_at ? new Date(t.created_at) : null;
+
+      if (periodo !== "todos" && dataChamado) {
+        const diff = Math.floor((hoje - dataChamado) / (1000 * 60 * 60 * 24));
+        if (periodo === "7" && diff > 7) return false;
+        if (periodo === "30" && diff > 30) return false;
+        if (periodo === "90" && diff > 90) return false;
+      }
+
+      if (localidade !== "todas" && t.localidade !== localidade) return false;
+      if (status !== "todos" && t.status !== status) return false;
+      if (prioridade !== "todas" && t.prioridade !== prioridade) return false;
+      if (equipe !== "todas" && t.tecnico !== equipe) return false;
+
+      return true;
+    });
+  }, [tickets, periodo, localidade, status, prioridade, equipe]);
+
+  const dados = useMemo(() => {
+    const total = filtrados.length;
+
+    const fechados = filtrados.filter((t) =>
+      ["Fechado", "Concluído", "Finalizado", "Encerrado"].includes(t.status)
+    ).length;
+
+    const abertos = total - fechados;
+
+    const emAndamento = filtrados.filter((t) =>
+      ["Em andamento", "Em execução"].includes(t.status)
+    ).length;
+
+    const criticos = filtrados.filter((t) => {
+      const p = normalizar(t.prioridade);
+      const c = normalizar(t.criticidade);
+      return p.includes("crit") || c === "severa";
+    }).length;
+
+    const slaBase = filtrados.filter((t) => t.sla);
+    const slaOk = slaBase.filter(
+      (t) => Number(t.sla_consumido || 0) <= Number(t.sla)
+    ).length;
+
+    const sla = slaBase.length ? Math.round((slaOk / slaBase.length) * 100) : 0;
+    const taxaResolucao = total ? Math.round((fechados / total) * 100) : 0;
+
+    return {
+      total,
+      abertos,
+      fechados,
+      emAndamento,
+      criticos,
+      sla,
+      taxaResolucao,
+      porPrioridade: agrupar(filtrados, "prioridade"),
+      porLocalidade: agrupar(filtrados, "localidade"),
+      porStatus: agrupar(filtrados, "status"),
+      porTipo: agrupar(filtrados, "tipo_falha"),
+      porEquipe: agrupar(filtrados, "tecnico"),
+    };
+  }, [filtrados]);
+
+  const periodoTexto =
+    periodo === "todos" ? "Todo o período" : `Últimos ${periodo} dias`;
+
+  async function exportarPDF() {
+    setGerandoPdf(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const paginas = document.querySelectorAll(".pdf-stage-hidden .pdf-page");
+      const pdf = new jsPDF("landscape", "mm", "a4");
+
+      for (let i = 0; i < paginas.length; i++) {
+        const canvas = await html2canvas(paginas[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+        const largura = pdf.internal.pageSize.getWidth();
+        const altura = pdf.internal.pageSize.getHeight();
+
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, 0, largura, altura);
+      }
+
+      pdf.save(
+        `relatorio-executivo-${new Date().toISOString().slice(0, 10)}.pdf`
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Não foi possível gerar o PDF.");
+    }
+
+    setGerandoPdf(false);
+  }
+
+  function RelatorioCompleto() {
+    const totalPaginas = 4;
+
+    return (
+      <>
+        <ReportPage pageNumber={1} totalPages={totalPaginas}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <img
+              src={LOGO_URL}
+              alt="Logo"
+              style={{ width: 170, background: "white", borderRadius: 8 }}
+            />
+
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
+                RELATÓRIO EXECUTIVO
+              </div>
+              <div style={{ color: "#64748b", marginTop: 4 }}>
+                Gestão de Chamados
+              </div>
             </div>
           </div>
-        </div>
 
-        <div style={{ marginTop: 60 }}>
+          <div style={{ marginTop: 70 }}>
+            <div
+              style={{
+                fontSize: 46,
+                fontWeight: 900,
+                color: "#0f2f5f",
+                lineHeight: 1.1,
+              }}
+            >
+              RELATÓRIO ANALÍTICO
+              <br />
+              DE CHAMADOS
+            </div>
+
+            <div
+              style={{
+                marginTop: 22,
+                width: 120,
+                height: 5,
+                background: "#1e9bff",
+              }}
+            />
+
+            <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
+              Período: <strong>{periodoTexto}</strong>
+            </div>
+
+            <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
+              Estação: {localidade === "todas" ? "Todas" : localidade} • Status:{" "}
+              {status === "todos" ? "Todos" : status} • Prioridade:{" "}
+              {prioridade === "todas" ? "Todas" : prioridade} • Equipe:{" "}
+              {equipe === "todas" ? "Todas" : equipe}
+            </div>
+          </div>
+
           <div
             style={{
-              fontSize: 44,
-              fontWeight: 900,
-              color: "#0f2f5f",
-              lineHeight: 1.1,
+              position: "absolute",
+              left: 38,
+              right: 38,
+              bottom: 65,
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 16,
             }}
           >
-            RELATÓRIO DE
-            <br />
-            EQUIPAMENTOS
+            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados filtrados" cor="#1e3a8a" />
+            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" />
+            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Concluídos" cor="#16a34a" />
+            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Alta atenção" cor="#dc2626" />
+            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" />
+          </div>
+
+          <div style={{ position: "absolute", bottom: 40, right: 38, color: "#64748b" }}>
+            Gerado em {new Date().toLocaleString("pt-BR")}
+          </div>
+        </ReportPage>
+
+        <ReportPage pageNumber={2} totalPages={totalPaginas}>
+          <h1 style={{ color: "#0f2f5f", margin: 0 }}>Sumário Executivo</h1>
+
+          <p style={{ color: "#475569", fontSize: 18, marginTop: 16, lineHeight: 1.6 }}>
+            Este relatório apresenta uma visão consolidada dos chamados registrados
+            na plataforma, considerando os filtros aplicados. O objetivo é apoiar
+            a análise operacional, priorização de atendimento, acompanhamento de SLA
+            e tomada de decisão gerencial.
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 16,
+              marginTop: 32,
+            }}
+          >
+            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados" cor="#1e3a8a" />
+            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" />
+            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Finalizados" cor="#16a34a" />
+            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Atenção imediata" cor="#dc2626" />
+            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" />
           </div>
 
           <div
             style={{
-              marginTop: 22,
-              width: 120,
-              height: 5,
-              background: "#1e9bff",
+              marginTop: 40,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 26,
             }}
-          />
+          >
+            <div>
+              <h2 style={{ color: "#0f2f5f" }}>Resumo Operacional</h2>
+              <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
+                <li>Taxa de resolução: {dados.taxaResolucao}%</li>
+                <li>Chamados em andamento: {dados.emAndamento}</li>
+                <li>Chamados críticos: {dados.criticos}</li>
+                <li>SLA atendido: {dados.sla}%</li>
+              </ul>
+            </div>
 
-          <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
-            Bombas, rastelos e comportas por unidade operacional.
+            <div>
+              <h2 style={{ color: "#0f2f5f" }}>Filtros Aplicados</h2>
+              <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
+                <li>Período: {periodoTexto}</li>
+                <li>Estação: {localidade === "todas" ? "Todas" : localidade}</li>
+                <li>Status: {status === "todos" ? "Todos" : status}</li>
+                <li>Prioridade: {prioridade === "todas" ? "Todas" : prioridade}</li>
+                <li>Equipe: {equipe === "todas" ? "Todas" : equipe}</li>
+              </ul>
+            </div>
           </div>
 
-          <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
-            Gerado em {new Date().toLocaleString("pt-BR")}
+          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
+            Consórcio União OBRACON • Relatório Executivo
+          </div>
+        </ReportPage>
+
+        <ReportPage pageNumber={3} totalPages={totalPaginas}>
+          <h1 style={{ color: "#0f2f5f", margin: 0 }}>
+            Distribuição dos Chamados
+          </h1>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 22,
+              marginTop: 28,
+            }}
+          >
+            <TextoResumo titulo="Chamados por estação" dados={dados.porLocalidade} />
+            <TextoResumo titulo="Chamados por equipe" dados={dados.porEquipe} />
+            <TextoResumo titulo="Chamados por status" dados={dados.porStatus} />
+            <TextoResumo titulo="Chamados por prioridade" dados={dados.porPrioridade} />
+          </div>
+
+          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
+            Documento pronto para impressão • Dados organizados para leitura gerencial
+          </div>
+        </ReportPage>
+
+        <ReportPage pageNumber={4} totalPages={totalPaginas}>
+          <h1 style={{ color: "#0f2f5f", margin: 0 }}>Conclusão Gerencial</h1>
+
+          <div style={{ marginTop: 30, fontSize: 18, lineHeight: 1.7, color: "#334155" }}>
+            <p>
+              A base analisada contém <strong>{dados.total}</strong> chamados dentro dos
+              filtros selecionados. Deste total, <strong>{dados.abertos}</strong> permanecem
+              em aberto e <strong>{dados.fechados}</strong> encontram-se fechados.
+            </p>
+
+            <p>
+              O índice de SLA atendido está em <strong>{dados.sla}%</strong>, enquanto
+              a taxa de resolução do período está em <strong>{dados.taxaResolucao}%</strong>.
+            </p>
+
+            <p>
+              Foram identificados <strong>{dados.criticos}</strong> chamados classificados
+              como críticos ou severos, recomendando acompanhamento prioritário.
+            </p>
+          </div>
+
+          <div
+            style={{
+              marginTop: 36,
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: 14,
+              padding: 20,
+            }}
+          >
+            <h2 style={{ color: "#0f2f5f", marginTop: 0 }}>Recomendações</h2>
+            <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
+              <li>Monitorar chamados críticos diariamente.</li>
+              <li>Acompanhar chamados em andamento e aguardando compra.</li>
+              <li>Usar os dados por estação para identificar recorrências operacionais.</li>
+              <li>Revisar causas de falhas recorrentes e priorizar ações preventivas.</li>
+            </ul>
+          </div>
+
+          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
+            Consórcio União OBRACON • Plataforma Corporativa de Chamados
+          </div>
+        </ReportPage>
+      </>
+    );
+  }
+
+  return (
+    <div style={styles.sectionCard}>
+      <style>{`
+        .analytics-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 16px;
+        }
+
+        .analytics-card {
+          background: linear-gradient(180deg, #061a2f 0%, #020b16 100%);
+          border: 1px solid #1e6bb8;
+          border-radius: 16px;
+          padding: 16px;
+          color: white;
+          min-height: 310px;
+          box-shadow: 0 0 24px rgba(0,120,255,.10);
+        }
+
+        .analytics-card h3 {
+          margin: 0 0 14px;
+          font-size: 15px;
+          font-weight: 900;
+          color: #f4f8ff;
+        }
+
+        .pdf-stage-hidden {
+          position: absolute;
+          left: -99999px;
+          top: 0;
+          width: 1123px;
+          z-index: -1;
+        }
+
+        .preview-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,.78);
+          z-index: 9999;
+          overflow: auto;
+          padding: 30px;
+        }
+
+        .preview-actions {
+          position: sticky;
+          top: 0;
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          margin-bottom: 20px;
+          z-index: 2;
+        }
+
+        .preview-page {
+          width: 1123px;
+          margin: 0 auto 26px;
+          box-shadow: 0 20px 60px rgba(0,0,0,.45);
+        }
+
+        .recharts-default-tooltip {
+          background: #061a2f !important;
+          border: 1px solid #1e6bb8 !important;
+          border-radius: 12px !important;
+          color: white !important;
+          box-shadow: 0 0 20px rgba(30,155,255,.35) !important;
+        }
+
+        .recharts-legend-item-text {
+          color: #dce8f8 !important;
+        }
+
+        .recharts-text {
+          fill: #cfe8ff;
+          font-weight: 700;
+        }
+      `}</style>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div style={{ ...styles.label, marginBottom: 6 }}>
+            📊 Analytics / Relatório Executivo
+          </div>
+          <div style={{ color: "#9fb1cc" }}>
+            Pré-visualize e baixe um relatório profissional com logo, resumo e dados organizados.
           </div>
         </div>
 
-        <div
-          style={{
-            position: "absolute",
-            left: 38,
-            right: 38,
-            bottom: 65,
-            display: "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
-            gap: 16,
-          }}
-        >
-          <PdfKpi titulo="EBAPs" valor={ebaps.length} detalhe="Unidades monitoradas" cor="#1e3a8a" />
-          <PdfKpi titulo="Equipamentos" valor={totais.total} detalhe="Total cadastrado" cor="#0891b2" />
-          <PdfKpi titulo="Operando" valor={totais.operando} detalhe="Funcionando" cor="#16a34a" />
-          <PdfKpi titulo="Atenção" valor={totais.atencao} detalhe="Acompanhamento" cor="#ca8a04" />
-          <PdfKpi titulo="Falha" valor={totais.falha} detalhe="Intervenção" cor="#dc2626" />
-        </div>
-      </ReportPage>
-
-      <ReportPage pageNumber={2} totalPages={totalPaginas}>
-        <h1 style={{ color: "#0f2f5f", margin: 0 }}>Resumo por EBAP</h1>
-
-        <table
-          style={{
-            marginTop: 24,
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 14,
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#0f2f5f", color: "white" }}>
-              <th style={th}>EBAP</th>
-              <th style={th}>Bombas</th>
-              <th style={th}>Rastelos</th>
-              <th style={th}>Comportas</th>
-              <th style={th}>Observações</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {ebaps.map((ebap) => (
-              <tr key={ebap.id}>
-                <td style={td}>
-                  <strong>{ebap.nome}</strong>
-                  <br />
-                  <span style={{ color: "#64748b", fontSize: 12 }}>{ebap.id}</span>
-                </td>
-                <td style={td}>{renderPdfResumo(ebap.bombas)}</td>
-                <td style={td}>{renderPdfResumo(ebap.rastelos)}</td>
-                <td style={td}>{renderPdfResumo(ebap.comportas)}</td>
-                <td style={td}>{renderObservacoes(ebap)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ReportPage>
-    </>
-  );
-}
-
-function PdfKpi({ titulo, valor, detalhe, cor }) {
-  return (
-    <div
-      style={{
-        border: `1px solid ${cor}`,
-        background: "#ffffff",
-        borderRadius: 16,
-        padding: 16,
-        color: "#0f172a",
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>{titulo}</div>
-      <div style={{ fontSize: 32, fontWeight: 950, color: cor }}>{valor}</div>
-      <div style={{ fontSize: 12, color: "#64748b" }}>{detalhe}</div>
-    </div>
-  );
-}
-
-function renderPdfResumo(lista) {
-  const r = resumo(lista);
-  const status = r.falha > 0 ? "Falha" : r.atencao > 0 ? "Atenção" : "Operando";
-  const color = r.falha > 0 ? "#dc2626" : r.atencao > 0 ? "#ca8a04" : "#15803d";
-
-  return (
-    <div>
-      <strong>
-        {r.operando}/{r.total}
-      </strong>
-      <div style={{ color, fontWeight: 800 }}>{status}</div>
-      <div style={{ color: "#64748b", fontSize: 12 }}>
-        {r.operando} op. | {r.atencao} atenção | {r.falha} falha
+        <img
+          src={LOGO_URL}
+          alt="Logo"
+          style={{ width: 120, borderRadius: 12, background: "white" }}
+        />
       </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 12,
+          marginTop: 22,
+        }}
+      >
+        <select style={styles.input} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
+          <option value="todos">Todo período</option>
+          <option value="7">Últimos 7 dias</option>
+          <option value="30">Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+
+        <select style={styles.input} value={localidade} onChange={(e) => setLocalidade(e.target.value)}>
+          <option value="todas">Todas as estações</option>
+          {localidades.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+
+        <select style={styles.input} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="todos">Todos os status</option>
+          {statusList.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+
+        <select style={styles.input} value={prioridade} onChange={(e) => setPrioridade(e.target.value)}>
+          <option value="todas">Todas as prioridades</option>
+          {prioridades.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+
+        <select style={styles.input} value={equipe} onChange={(e) => setEquipe(e.target.value)}>
+          <option value="todas">Todas as equipes</option>
+          {equipes.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+
+        <button style={styles.secondaryButton} onClick={() => setPreviewAberto(true)}>
+          👁️ Pré-visualizar
+        </button>
+
+        <button style={styles.primaryButton} onClick={exportarPDF} disabled={gerandoPdf}>
+          {gerandoPdf ? "Gerando PDF..." : "📄 Baixar PDF"}
+        </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 14,
+          marginTop: 24,
+        }}
+      >
+        <div style={styles.softBox}><strong>Total</strong><br />{dados.total}</div>
+        <div style={styles.softBox}><strong>Abertos</strong><br />{dados.abertos}</div>
+        <div style={styles.softBox}><strong>Fechados</strong><br />{dados.fechados}</div>
+        <div style={styles.softBox}><strong>Críticos</strong><br />{dados.criticos}</div>
+        <div style={styles.softBox}><strong>SLA atendido</strong><br />{dados.sla}%</div>
+      </div>
+
+      <div className="analytics-grid" style={{ marginTop: 24 }}>
+        <div className="analytics-card">
+          <h3>Chamados por prioridade</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={dados.porPrioridade}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={55}
+                outerRadius={90}
+                label
+                paddingAngle={4}
+              >
+                {dados.porPrioridade.map((item, i) => (
+                  <Cell key={i} fill={corPrioridade(item.name)} stroke="#020b16" strokeWidth={2} />
+                ))}
+              </Pie>
+              <TooltipDark />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="analytics-card">
+          <h3>Chamados por estação</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={dados.porLocalidade}>
+              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="name" hide />
+              <YAxis stroke="#9fb1cc" allowDecimals={false} />
+              <TooltipDark />
+              <Bar dataKey="value" fill="#1e9bff" radius={[8, 8, 0, 0]}>
+                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="analytics-card">
+          <h3>Chamados por status</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={dados.porStatus}>
+              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="name" hide />
+              <YAxis stroke="#9fb1cc" allowDecimals={false} />
+              <TooltipDark />
+              <Bar dataKey="value" fill="#30d158" radius={[8, 8, 0, 0]}>
+                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="analytics-card">
+          <h3>Chamados por equipe</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={dados.porEquipe}>
+              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="name" hide />
+              <YAxis stroke="#9fb1cc" allowDecimals={false} />
+              <TooltipDark />
+              <Bar dataKey="value" fill="#ff9f1a" radius={[8, 8, 0, 0]}>
+                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="pdf-stage-hidden">
+        <RelatorioCompleto />
+      </div>
+
+      {previewAberto && (
+        <div className="preview-overlay">
+          <div className="preview-actions">
+            <button style={styles.secondaryButton} onClick={() => setPreviewAberto(false)}>
+              Fechar
+            </button>
+
+            <button style={styles.primaryButton} onClick={exportarPDF} disabled={gerandoPdf}>
+              {gerandoPdf ? "Gerando PDF..." : "📄 Baixar PDF"}
+            </button>
+          </div>
+
+          <div className="preview-page">
+            <RelatorioCompleto />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-function renderObservacoes(ebap) {
-  const todos = [...ebap.bombas, ...ebap.rastelos, ...ebap.comportas];
-  const obs = todos.filter((e) => e.status !== "operando" && e.observacao?.trim());
-
-  if (!obs.length) return <span style={{ color: "#15803d", fontWeight: 800 }}>Sem ocorrências</span>;
-
-  return obs.map((o) => (
-    <div key={o.id} style={{ marginBottom: 4 }}>
-      <strong>{o.nome}:</strong> {o.observacao}
-    </div>
-  ));
-}
-
-const th = {
-  padding: 12,
-  textAlign: "left",
-  fontWeight: 800,
-};
-
-const td = {
-  padding: 12,
-  borderBottom: "1px solid #dbe3ef",
-  verticalAlign: "top",
-};

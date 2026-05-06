@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import {
   Activity,
   AlertTriangle,
@@ -57,8 +59,6 @@ function PumpIcon({ size = 58 }) {
       <path d="M36 10V5H44V10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M28 44H18C14 44 11 47 11 51V58" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
       <path d="M52 44H62C66 44 69 47 69 51V58" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M34 20H46" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity=".7" />
-      <path d="M32 50H48" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity=".7" />
     </svg>
   );
 }
@@ -123,6 +123,7 @@ export default function EquipamentosPage() {
   const [ebaps, setEbaps] = useState(dadosIniciais);
   const [editando, setEditando] = useState(false);
   const [modal, setModal] = useState(null);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   const totais = useMemo(() => {
     let operando = 0;
@@ -143,9 +144,38 @@ export default function EquipamentosPage() {
     return { operando, atencao, falha, total };
   }, [ebaps]);
 
-  function exportarPDF() {
+  async function exportarPDF() {
+    setGerandoPdf(true);
     setModal(null);
-    setTimeout(() => window.print(), 250);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const paginas = document.querySelectorAll(".pdf-stage-hidden .pdf-page");
+      const pdf = new jsPDF("landscape", "mm", "a4");
+
+      for (let i = 0; i < paginas.length; i++) {
+        const canvas = await html2canvas(paginas[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+        const largura = pdf.internal.pageSize.getWidth();
+        const altura = pdf.internal.pageSize.getHeight();
+
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, 0, largura, altura);
+      }
+
+      pdf.save(`relatorio-equipamentos-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (error) {
+      console.error(error);
+      alert("Não foi possível gerar o PDF.");
+    }
+
+    setGerandoPdf(false);
   }
 
   function alterarQuantidade(index, tipo, quantidade) {
@@ -155,7 +185,9 @@ export default function EquipamentosPage() {
       prev.map((ebap, i) => {
         if (i !== index) return ebap;
 
-        const prefixo = tipo === "bombas" ? "Bomba" : tipo === "rastelos" ? "Rastelo" : "Comporta";
+        const prefixo =
+          tipo === "bombas" ? "Bomba" : tipo === "rastelos" ? "Rastelo" : "Comporta";
+
         const atuais = ebap[tipo];
 
         const novaLista =
@@ -214,223 +246,160 @@ export default function EquipamentosPage() {
 
   return (
     <>
-     <style>{`
-  .pdf-report {
-    display: none;
-  }
+      <style>{`
+        .pdf-stage-hidden {
+          position: absolute;
+          left: -99999px;
+          top: 0;
+          width: 1123px;
+          z-index: -1;
+        }
+      `}</style>
 
-  @media print {
-    @page {
-      size: A4 landscape;
-      margin: 0;
-    }
+      <div style={{ minHeight: "100vh", color: "#ecf3ff", fontFamily: "Inter, Arial, sans-serif" }}>
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 950, margin: 0 }}>
+            Status de Equipamentos por EBAP
+          </h1>
 
-    html,
-    body {
-      margin: 0 !important;
-      padding: 0 !important;
-      width: 297mm !important;
-      height: 210mm !important;
-      background: white !important;
-      overflow: hidden !important;
-    }
+          <p style={{ color: "#9fb1cc", marginTop: 8 }}>
+            Relatório de bombas, rastelos e comportas por unidade operacional.
+          </p>
+        </div>
 
-    body * {
-      visibility: hidden !important;
-    }
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(180px, 1fr))",
+            gap: 16,
+            marginBottom: 22,
+          }}
+        >
+          <TopCard title="EBAPs" value={ebaps.length} icon={<Building2 />} />
+          <TopCard title="Total" value={totais.total} icon={<Gauge />} />
+          <TopCard title="Operando" value={totais.operando} color="#38e66b" icon={<Activity />} />
+          <TopCard title="Atenção" value={totais.atencao} color="#ffc83d" icon={<AlertTriangle />} />
+          <TopCard title="Falha" value={totais.falha} color="#ff5148" icon={<ShieldAlert />} />
+        </div>
 
-    .pdf-report,
-    .pdf-report * {
-      visibility: visible !important;
-    }
+        <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+          <button
+            onClick={() => setEditando((v) => !v)}
+            style={{
+              background: editando
+                ? "linear-gradient(135deg, #14a44d, #0f7a34)"
+                : "linear-gradient(135deg, #2f7bff, #1658d1)",
+              color: "white",
+              border: "none",
+              borderRadius: 16,
+              padding: "14px 22px",
+              fontWeight: 900,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <Save size={18} />
+            {editando ? "Salvar quantidades" : "Editar quantidades"}
+          </button>
 
-    .pdf-report {
-      display: block !important;
-      position: fixed !important;
-      inset: 0 !important;
-      width: 297mm !important;
-      height: 210mm !important;
-      background: white !important;
-      color: #111827 !important;
-      font-family: Arial, sans-serif !important;
-      z-index: 999999 !important;
-      overflow: hidden !important;
-    }
+          <button
+            onClick={exportarPDF}
+            disabled={gerandoPdf}
+            style={{
+              background: "linear-gradient(135deg, #ff7a1a, #d85d00)",
+              color: "white",
+              border: "none",
+              borderRadius: 16,
+              padding: "14px 22px",
+              fontWeight: 900,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              opacity: gerandoPdf ? 0.7 : 1,
+            }}
+          >
+            <FileDown size={18} />
+            {gerandoPdf ? "Gerando PDF..." : "Baixar PDF"}
+          </button>
+        </div>
 
-    .pdf-page {
-      width: 297mm !important;
-      height: 210mm !important;
-      padding: 7mm !important;
-      box-sizing: border-box !important;
-      background: #f1f5f9 !important;
-    }
-
-    .pdf-content {
-      width: 100% !important;
-      height: 100% !important;
-      background: white !important;
-      border-radius: 12px !important;
-      padding: 9mm !important;
-      box-sizing: border-box !important;
-      border: 1px solid #dbe3ef !important;
-      overflow: hidden !important;
-    }
-
-    .screen-only,
-    aside,
-    header,
-    nav,
-    footer,
-    button,
-    .no-print {
-      display: none !important;
-      visibility: hidden !important;
-    }
-  }
-`}</style>
-
-      <div className="screen-only">
-        <div style={{ minHeight: "100vh", color: "#ecf3ff", fontFamily: "Inter, Arial, sans-serif" }}>
-          <div style={{ marginBottom: 22 }}>
-            <h1 style={{ fontSize: 32, fontWeight: 950, margin: 0 }}>
-              Status de Equipamentos por EBAP
-            </h1>
-
-            <p style={{ color: "#9fb1cc", marginTop: 8 }}>
-              Relatório de bombas, rastelos e comportas por unidade operacional.
-            </p>
-          </div>
-
+        <div
+          style={{
+            background: "rgba(8,22,43,.86)",
+            border: "1px solid rgba(130,170,220,.18)",
+            borderRadius: 24,
+            overflow: "hidden",
+          }}
+        >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(5, minmax(180px, 1fr))",
-              gap: 16,
-              marginBottom: 22,
+              gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
+              padding: "18px 22px",
+              background: "rgba(255,255,255,.035)",
+              color: "#b9c8df",
+              fontWeight: 900,
+              textTransform: "uppercase",
+              fontSize: 13,
             }}
           >
-            <TopCard title="EBAPs" value={ebaps.length} icon={<Building2 />} />
-            <TopCard title="Total" value={totais.total} icon={<Gauge />} />
-            <TopCard title="Operando" value={totais.operando} color="#38e66b" icon={<Activity />} />
-            <TopCard title="Atenção" value={totais.atencao} color="#ffc83d" icon={<AlertTriangle />} />
-            <TopCard title="Falha" value={totais.falha} color="#ff5148" icon={<ShieldAlert />} />
+            <div>EBAP</div>
+            <HeaderIcon icon={<PumpIcon size={34} />} label="Bombas" />
+            <HeaderIcon icon={<RakeIcon size={34} />} label="Rastelos" />
+            <HeaderIcon icon={<GateIcon size={34} />} label="Comportas" />
           </div>
 
-          <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-            <button
-              onClick={() => setEditando((v) => !v)}
-              style={{
-                background: editando
-                  ? "linear-gradient(135deg, #14a44d, #0f7a34)"
-                  : "linear-gradient(135deg, #2f7bff, #1658d1)",
-                color: "white",
-                border: "none",
-                borderRadius: 16,
-                padding: "14px 22px",
-                fontWeight: 900,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <Save size={18} />
-              {editando ? "Salvar quantidades" : "Editar quantidades"}
-            </button>
-
-            <button
-              onClick={exportarPDF}
-              style={{
-                background: "linear-gradient(135deg, #ff7a1a, #d85d00)",
-                color: "white",
-                border: "none",
-                borderRadius: 16,
-                padding: "14px 22px",
-                fontWeight: 900,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <FileDown size={18} />
-              Exportar PDF
-            </button>
-          </div>
-
-          <div
-            style={{
-              background: "rgba(8,22,43,.86)",
-              border: "1px solid rgba(130,170,220,.18)",
-              borderRadius: 24,
-              overflow: "hidden",
-            }}
-          >
+          {ebaps.map((ebap, index) => (
             <div
+              key={ebap.id}
               style={{
                 display: "grid",
                 gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-                padding: "18px 22px",
-                background: "rgba(255,255,255,.035)",
-                color: "#b9c8df",
-                fontWeight: 900,
-                textTransform: "uppercase",
-                fontSize: 13,
+                gap: 14,
+                padding: 18,
+                borderTop: "1px solid rgba(130,170,220,.13)",
+                alignItems: "center",
               }}
             >
-              <div>EBAP</div>
-              <HeaderIcon icon={<PumpIcon size={34} />} label="Bombas" />
-              <HeaderIcon icon={<RakeIcon size={34} />} label="Rastelos" />
-              <HeaderIcon icon={<GateIcon size={34} />} label="Comportas" />
-            </div>
-
-            {ebaps.map((ebap, index) => (
-              <div
-                key={ebap.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-                  gap: 14,
-                  padding: 18,
-                  borderTop: "1px solid rgba(130,170,220,.13)",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 900 }}>{ebap.nome}</div>
-                  <div style={{ color: "#7f91ad", fontSize: 13 }}>{ebap.id}</div>
-                </div>
-
-                <StatusCard
-                  icon={<PumpIcon />}
-                  lista={ebap.bombas}
-                  editando={editando}
-                  onQtdChange={(qtd) => alterarQuantidade(index, "bombas", qtd)}
-                  onClick={() => setModal({ ebapIndex: index, tipo: "bombas", titulo: "Bombas" })}
-                />
-
-                <StatusCard
-                  icon={<RakeIcon />}
-                  lista={ebap.rastelos}
-                  editando={editando}
-                  onQtdChange={(qtd) => alterarQuantidade(index, "rastelos", qtd)}
-                  onClick={() => setModal({ ebapIndex: index, tipo: "rastelos", titulo: "Rastelos" })}
-                />
-
-                <StatusCard
-                  icon={<GateIcon />}
-                  lista={ebap.comportas}
-                  editando={editando}
-                  onQtdChange={(qtd) => alterarQuantidade(index, "comportas", qtd)}
-                  onClick={() => setModal({ ebapIndex: index, tipo: "comportas", titulo: "Comportas" })}
-                />
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>{ebap.nome}</div>
+                <div style={{ color: "#7f91ad", fontSize: 13 }}>{ebap.id}</div>
               </div>
-            ))}
-          </div>
+
+              <StatusCard
+                icon={<PumpIcon />}
+                lista={ebap.bombas}
+                editando={editando}
+                onQtdChange={(qtd) => alterarQuantidade(index, "bombas", qtd)}
+                onClick={() => setModal({ ebapIndex: index, tipo: "bombas", titulo: "Bombas" })}
+              />
+
+              <StatusCard
+                icon={<RakeIcon />}
+                lista={ebap.rastelos}
+                editando={editando}
+                onQtdChange={(qtd) => alterarQuantidade(index, "rastelos", qtd)}
+                onClick={() => setModal({ ebapIndex: index, tipo: "rastelos", titulo: "Rastelos" })}
+              />
+
+              <StatusCard
+                icon={<GateIcon />}
+                lista={ebap.comportas}
+                editando={editando}
+                onQtdChange={(qtd) => alterarQuantidade(index, "comportas", qtd)}
+                onClick={() => setModal({ ebapIndex: index, tipo: "comportas", titulo: "Comportas" })}
+              />
+            </div>
+          ))}
         </div>
       </div>
 
-      <RelatorioPDF ebaps={ebaps} totais={totais} />
+      <div className="pdf-stage-hidden">
+        <RelatorioCompleto ebaps={ebaps} totais={totais} />
+      </div>
 
       {modal && (
         <DetalhesModal
@@ -687,148 +656,168 @@ function DetalhesModal({ ebap, tipo, titulo, onClose, onStatusChange, onObservac
   );
 }
 
-function RelatorioPDF({ ebaps, totais }) {
-  const data = new Date().toLocaleString("pt-BR");
-
+function ReportPage({ children, pageNumber, totalPages }) {
   return (
-    <div className="pdf-report">
-      <div className="pdf-page">
-        <div className="pdf-content">
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              borderBottom: "4px solid #0f3f9f",
-              paddingBottom: 14,
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-              <img
-                src={LOGO_URL}
-                alt="Logo"
-                style={{
-                  width: 82,
-                  height: 58,
-                  objectFit: "contain",
-                }}
-              />
+    <div
+      className="pdf-page"
+      style={{
+        width: 1123,
+        minHeight: 794,
+        background: "#ffffff",
+        color: "#0f172a",
+        padding: 38,
+        boxSizing: "border-box",
+        fontFamily: "Arial, sans-serif",
+        position: "relative",
+      }}
+    >
+      {children}
 
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>
-                  Relatório Operacional de Equipamentos
-                </div>
-
-                <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
-                  Bombas, rastelos e comportas por EBAP
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                textAlign: "right",
-                color: "#475569",
-                fontSize: 12,
-                lineHeight: 1.5,
-              }}
-            >
-              <strong>Consórcio União OBRACON</strong>
-              <br />
-              Gerado em: {data}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 10,
-              marginBottom: 14,
-            }}
-          >
-            <PdfKpi title="EBAPs" value={ebaps.length} color="#2563eb" />
-            <PdfKpi title="Equipamentos" value={totais.total} color="#0891b2" />
-            <PdfKpi title="Operando" value={totais.operando} color="#15803d" />
-            <PdfKpi title="Atenção" value={totais.atencao} color="#ca8a04" />
-            <PdfKpi title="Falha" value={totais.falha} color="#dc2626" />
-          </div>
-
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              fontSize: 10.2,
-              overflow: "hidden",
-              borderRadius: 12,
-              border: "1px solid #dbe3ef",
-            }}
-          >
-            <thead>
-              <tr style={{ background: "#0f3f9f", color: "white" }}>
-                <th style={th}>EBAP</th>
-                <th style={th}>Bombas</th>
-                <th style={th}>Rastelos</th>
-                <th style={th}>Comportas</th>
-                <th style={th}>Observações</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {ebaps.map((ebap, i) => (
-                <tr
-                  key={ebap.id}
-                  style={{ background: i % 2 === 0 ? "#ffffff" : "#f1f5f9" }}
-                >
-                  <td style={td}>
-                    <strong>{ebap.nome}</strong>
-                    <br />
-                    <span style={{ color: "#64748b" }}>{ebap.id}</span>
-                  </td>
-
-                  <td style={td}>{renderPdfResumo(ebap.bombas)}</td>
-                  <td style={td}>{renderPdfResumo(ebap.rastelos)}</td>
-                  <td style={td}>{renderPdfResumo(ebap.comportas)}</td>
-                  <td style={td}>{renderObservacoes(ebap)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 10,
-              color: "#64748b",
-              display: "flex",
-              justifyContent: "space-between",
-            }}
-          >
-            <span>Relatório gerado automaticamente pelo sistema.</span>
-            <span>Manutenção / Operação</span>
-          </div>
-        </div>
+      <div
+        style={{
+          position: "absolute",
+          bottom: 18,
+          right: 38,
+          color: "#64748b",
+          fontSize: 13,
+        }}
+      >
+        Página {pageNumber} de {totalPages}
       </div>
     </div>
   );
 }
 
-function PdfKpi({ title, value, color }) {
+function RelatorioCompleto({ ebaps, totais }) {
+  const totalPaginas = 2;
+
+  return (
+    <>
+      <ReportPage pageNumber={1} totalPages={totalPaginas}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <img
+            src={LOGO_URL}
+            alt="Logo"
+            style={{ width: 160, background: "white", borderRadius: 8 }}
+          />
+
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
+              RELATÓRIO OPERACIONAL
+            </div>
+            <div style={{ color: "#64748b", marginTop: 4 }}>
+              Status de Equipamentos por EBAP
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 60 }}>
+          <div
+            style={{
+              fontSize: 44,
+              fontWeight: 900,
+              color: "#0f2f5f",
+              lineHeight: 1.1,
+            }}
+          >
+            RELATÓRIO DE
+            <br />
+            EQUIPAMENTOS
+          </div>
+
+          <div
+            style={{
+              marginTop: 22,
+              width: 120,
+              height: 5,
+              background: "#1e9bff",
+            }}
+          />
+
+          <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
+            Bombas, rastelos e comportas por unidade operacional.
+          </div>
+
+          <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
+            Gerado em {new Date().toLocaleString("pt-BR")}
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            left: 38,
+            right: 38,
+            bottom: 65,
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 16,
+          }}
+        >
+          <PdfKpi titulo="EBAPs" valor={ebaps.length} detalhe="Unidades monitoradas" cor="#1e3a8a" />
+          <PdfKpi titulo="Equipamentos" valor={totais.total} detalhe="Total cadastrado" cor="#0891b2" />
+          <PdfKpi titulo="Operando" valor={totais.operando} detalhe="Funcionando" cor="#16a34a" />
+          <PdfKpi titulo="Atenção" valor={totais.atencao} detalhe="Acompanhamento" cor="#ca8a04" />
+          <PdfKpi titulo="Falha" valor={totais.falha} detalhe="Intervenção" cor="#dc2626" />
+        </div>
+      </ReportPage>
+
+      <ReportPage pageNumber={2} totalPages={totalPaginas}>
+        <h1 style={{ color: "#0f2f5f", margin: 0 }}>Resumo por EBAP</h1>
+
+        <table
+          style={{
+            marginTop: 24,
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 14,
+          }}
+        >
+          <thead>
+            <tr style={{ background: "#0f2f5f", color: "white" }}>
+              <th style={th}>EBAP</th>
+              <th style={th}>Bombas</th>
+              <th style={th}>Rastelos</th>
+              <th style={th}>Comportas</th>
+              <th style={th}>Observações</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {ebaps.map((ebap) => (
+              <tr key={ebap.id}>
+                <td style={td}>
+                  <strong>{ebap.nome}</strong>
+                  <br />
+                  <span style={{ color: "#64748b", fontSize: 12 }}>{ebap.id}</span>
+                </td>
+                <td style={td}>{renderPdfResumo(ebap.bombas)}</td>
+                <td style={td}>{renderPdfResumo(ebap.rastelos)}</td>
+                <td style={td}>{renderPdfResumo(ebap.comportas)}</td>
+                <td style={td}>{renderObservacoes(ebap)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ReportPage>
+    </>
+  );
+}
+
+function PdfKpi({ titulo, valor, detalhe, cor }) {
   return (
     <div
       style={{
-        border: `2px solid ${color}`,
-        borderRadius: 14,
-        padding: 12,
+        border: `1px solid ${cor}`,
         background: "#ffffff",
+        borderRadius: 16,
+        padding: 16,
+        color: "#0f172a",
       }}
     >
-      <div style={{ color, fontWeight: 800, fontSize: 11 }}>{title}</div>
-      <div style={{ marginTop: 4, fontSize: 26, fontWeight: 900, color: "#111827" }}>
-        {value}
-      </div>
+      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>{titulo}</div>
+      <div style={{ fontSize: 32, fontWeight: 950, color: cor }}>{valor}</div>
+      <div style={{ fontSize: 12, color: "#64748b" }}>{detalhe}</div>
     </div>
   );
 }
@@ -840,9 +829,11 @@ function renderPdfResumo(lista) {
 
   return (
     <div>
-      <strong style={{ fontSize: 13 }}>{r.operando}/{r.total}</strong>
-      <div style={{ marginTop: 3, color, fontWeight: 700 }}>{status}</div>
-      <div style={{ color: "#64748b", fontSize: 9 }}>
+      <strong>
+        {r.operando}/{r.total}
+      </strong>
+      <div style={{ color, fontWeight: 800 }}>{status}</div>
+      <div style={{ color: "#64748b", fontSize: 12 }}>
         {r.operando} op. | {r.atencao} atenção | {r.falha} falha
       </div>
     </div>
@@ -851,29 +842,25 @@ function renderPdfResumo(lista) {
 
 function renderObservacoes(ebap) {
   const todos = [...ebap.bombas, ...ebap.rastelos, ...ebap.comportas];
+  const obs = todos.filter((e) => e.status !== "operando" && e.observacao?.trim());
 
-  const obs = todos.filter(
-    (e) => e.status !== "operando" && e.observacao?.trim()
-  );
-
-  if (!obs.length) return <span style={{ color: "#15803d", fontWeight: 700 }}>Sem ocorrências</span>;
+  if (!obs.length) return <span style={{ color: "#15803d", fontWeight: 800 }}>Sem ocorrências</span>;
 
   return obs.map((o) => (
-    <div key={o.id} style={{ marginBottom: 5 }}>
+    <div key={o.id} style={{ marginBottom: 4 }}>
       <strong>{o.nome}:</strong> {o.observacao}
     </div>
   ));
 }
 
 const th = {
-  padding: "9px 10px",
+  padding: 12,
   textAlign: "left",
   fontWeight: 800,
-  borderRight: "1px solid rgba(255,255,255,.25)",
 };
 
 const td = {
-  padding: "9px 10px",
+  padding: 12,
   borderBottom: "1px solid #dbe3ef",
   verticalAlign: "top",
 };
