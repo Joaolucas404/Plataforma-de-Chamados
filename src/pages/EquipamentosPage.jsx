@@ -5,6 +5,7 @@ import {
   Activity,
   AlertTriangle,
   Building2,
+  Eye,
   FileDown,
   Gauge,
   Save,
@@ -124,6 +125,7 @@ export default function EquipamentosPage() {
   const [editando, setEditando] = useState(false);
   const [modal, setModal] = useState(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [previewAberto, setPreviewAberto] = useState(false);
 
   const totais = useMemo(() => {
     let operando = 0;
@@ -159,6 +161,7 @@ export default function EquipamentosPage() {
           scale: 2,
           useCORS: true,
           backgroundColor: "#ffffff",
+          letterRendering: true,
         });
 
         const imgData = canvas.toDataURL("image/png");
@@ -254,6 +257,33 @@ export default function EquipamentosPage() {
           width: 1123px;
           z-index: -1;
         }
+
+        .preview-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,.82);
+          z-index: 99999;
+          overflow: auto;
+          padding: 28px;
+        }
+
+        .preview-actions {
+          position: sticky;
+          top: 0;
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          margin-bottom: 20px;
+          z-index: 2;
+        }
+
+        .preview-page {
+          width: 1123px;
+          margin: 0 auto 28px;
+          box-shadow: 0 24px 70px rgba(0,0,0,.45);
+          border-radius: 10px;
+          overflow: hidden;
+        }
       `}</style>
 
       <div style={{ minHeight: "100vh", color: "#ecf3ff", fontFamily: "Inter, Arial, sans-serif" }}>
@@ -302,6 +332,25 @@ export default function EquipamentosPage() {
           >
             <Save size={18} />
             {editando ? "Salvar quantidades" : "Editar quantidades"}
+          </button>
+
+          <button
+            onClick={() => setPreviewAberto(true)}
+            style={{
+              background: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+              color: "white",
+              border: "none",
+              borderRadius: 16,
+              padding: "14px 22px",
+              fontWeight: 900,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <Eye size={18} />
+            Pré-visualizar
           </button>
 
           <button
@@ -400,6 +449,47 @@ export default function EquipamentosPage() {
       <div className="pdf-stage-hidden">
         <RelatorioCompleto ebaps={ebaps} totais={totais} />
       </div>
+
+      {previewAberto && (
+        <div className="preview-overlay">
+          <div className="preview-actions">
+            <button
+              onClick={() => setPreviewAberto(false)}
+              style={{
+                background: "rgba(255,255,255,.12)",
+                color: "white",
+                border: "1px solid rgba(255,255,255,.22)",
+                borderRadius: 14,
+                padding: "12px 18px",
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              Fechar
+            </button>
+
+            <button
+              onClick={exportarPDF}
+              disabled={gerandoPdf}
+              style={{
+                background: "linear-gradient(135deg, #ff7a1a, #d85d00)",
+                color: "white",
+                border: "none",
+                borderRadius: 14,
+                padding: "12px 18px",
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              {gerandoPdf ? "Gerando PDF..." : "Baixar PDF"}
+            </button>
+          </div>
+
+          <div className="preview-page">
+            <RelatorioCompleto ebaps={ebaps} totais={totais} />
+          </div>
+        </div>
+      )}
 
       {modal && (
         <DetalhesModal
@@ -688,6 +778,14 @@ function ReportPage({ children, pageNumber, totalPages }) {
   );
 }
 
+function TextoLinha({ children, style = {} }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, ...style }}>
+      {children}
+    </div>
+  );
+}
+
 function RelatorioCompleto({ ebaps, totais }) {
   const totalPaginas = 2;
 
@@ -702,26 +800,28 @@ function RelatorioCompleto({ ebaps, totais }) {
           />
 
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
-              RELATÓRIO OPERACIONAL
-            </div>
-            <div style={{ color: "#64748b", marginTop: 4 }}>
-              Status de Equipamentos por EBAP
-            </div>
+            <TextoLinha style={{ justifyContent: "flex-end", fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
+              <span>RELATÓRIO</span>
+              <span>OPERACIONAL</span>
+            </TextoLinha>
+
+            <TextoLinha style={{ justifyContent: "flex-end", color: "#64748b", marginTop: 4 }}>
+              <span>Status</span>
+              <span>de</span>
+              <span>Equipamentos</span>
+              <span>por</span>
+              <span>EBAP</span>
+            </TextoLinha>
           </div>
         </div>
 
         <div style={{ marginTop: 60 }}>
-          <div
-            style={{
-              fontSize: 44,
-              fontWeight: 900,
-              color: "#0f2f5f",
-              lineHeight: 1.1,
-            }}
-          >
-            RELATÓRIO DE
-            <br />
+          <TextoLinha style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
+            <span>RELATÓRIO</span>
+            <span>DE</span>
+          </TextoLinha>
+
+          <div style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
             EQUIPAMENTOS
           </div>
 
@@ -734,13 +834,21 @@ function RelatorioCompleto({ ebaps, totais }) {
             }}
           />
 
-          <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
-            Bombas, rastelos e comportas por unidade operacional.
-          </div>
+          <TextoLinha style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
+            <span>Bombas,</span>
+            <span>rastelos</span>
+            <span>e</span>
+            <span>comportas</span>
+            <span>por</span>
+            <span>unidade</span>
+            <span>operacional.</span>
+          </TextoLinha>
 
-          <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
-            Gerado em {new Date().toLocaleString("pt-BR")}
-          </div>
+          <TextoLinha style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
+            <span>Gerado</span>
+            <span>em</span>
+            <span>{new Date().toLocaleString("pt-BR")}</span>
+          </TextoLinha>
         </div>
 
         <div
@@ -763,7 +871,11 @@ function RelatorioCompleto({ ebaps, totais }) {
       </ReportPage>
 
       <ReportPage pageNumber={2} totalPages={totalPaginas}>
-        <h1 style={{ color: "#0f2f5f", margin: 0 }}>Resumo por EBAP</h1>
+        <TextoLinha style={{ color: "#0f2f5f", margin: 0, fontSize: 30, fontWeight: 900 }}>
+          <span>Resumo</span>
+          <span>por</span>
+          <span>EBAP</span>
+        </TextoLinha>
 
         <table
           style={{
@@ -832,10 +944,16 @@ function renderPdfResumo(lista) {
       <strong>
         {r.operando}/{r.total}
       </strong>
+
       <div style={{ color, fontWeight: 800 }}>{status}</div>
-      <div style={{ color: "#64748b", fontSize: 12 }}>
-        {r.operando} op. | {r.atencao} atenção | {r.falha} falha
-      </div>
+
+      <TextoLinha style={{ color: "#64748b", fontSize: 12 }}>
+        <span>{r.operando} op.</span>
+        <span>|</span>
+        <span>{r.atencao} atenção</span>
+        <span>|</span>
+        <span>{r.falha} falha</span>
+      </TextoLinha>
     </div>
   );
 }
@@ -844,7 +962,14 @@ function renderObservacoes(ebap) {
   const todos = [...ebap.bombas, ...ebap.rastelos, ...ebap.comportas];
   const obs = todos.filter((e) => e.status !== "operando" && e.observacao?.trim());
 
-  if (!obs.length) return <span style={{ color: "#15803d", fontWeight: 800 }}>Sem ocorrências</span>;
+  if (!obs.length) {
+    return (
+      <TextoLinha style={{ color: "#15803d", fontWeight: 800 }}>
+        <span>Sem</span>
+        <span>ocorrências</span>
+      </TextoLinha>
+    );
+  }
 
   return obs.map((o) => (
     <div key={o.id} style={{ marginBottom: 4 }}>
