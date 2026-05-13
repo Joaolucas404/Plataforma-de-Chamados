@@ -14,6 +14,7 @@ import FuncionariosPage from "./pages/FuncionariosPage";
 import FeriasPage from "./pages/FeriasPage";
 import { lightTheme, darkTheme } from "./theme";
 import EquipamentosPage from "./pages/EquipamentosPage";
+import EBAPStatusPage from "./pages/EBAPStatusPage";
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1122,6 +1123,12 @@ export default function App() {
       colors={colors}
       usuario={usuario}
     />
+  }
+/>
+<Route
+  path="/ebap-status"
+  element={
+    <EBAPStatusPage />
   }
 />
         <Route

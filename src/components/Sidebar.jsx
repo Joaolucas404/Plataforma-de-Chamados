@@ -42,6 +42,7 @@ export default function Sidebar({
       <Item path="/abertura" icon="📝" label="Abrir chamado" />
       <Item path="/chamados" icon="📂" label="Chamados" />
       <Item path="/equipamentos" icon="⚙️" label="Equipamentos" />
+      <Item path="/ebap-status" icon="🖥️" label="EBAP Status" />
       <Item path="/analytics" icon="📈" label="Analytics" />
 
       {/* ======================== */}
