@@ -39,6 +39,7 @@ export default function DetalheChamadoPage({
   const [comentarios, setComentarios] = useState([]);
   const [comentario, setComentario] = useState("");
   const [modalEdicao, setModalEdicao] = useState(false);
+  const [modalExcluir, setModalExcluir] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -47,53 +48,55 @@ export default function DetalheChamadoPage({
   const isGestor = usuario?.perfil === "gestor";
   const chamadoId = chamado?.id || selecionado?.id || id;
 
-async function carregarDetalhes() {
-  if (!supabase || !chamadoId) return;
+  async function carregarDetalhes() {
+    if (!supabase || !chamadoId) return;
 
-  const { data } = await supabase
-    .from("chamados")
-    .select("*")
-    .eq("id", chamadoId)
-    .single();
+    const { data } = await supabase
+      .from("chamados")
+      .select("*")
+      .eq("id", chamadoId)
+      .single();
 
-  if (data) {
-    setChamado(data);
-    setForm(data);
+    if (data) {
+      setChamado(data);
+      setForm(data);
+    }
+
+    carregarComentarios();
+    carregarFotos();
+    carregarEquipes();
   }
 
-  carregarComentarios();
-  carregarFotos();
-  carregarEquipes();
-}
   useEffect(() => {
-  carregarDetalhes();
+    carregarDetalhes();
 
-  if (!chamadoId || !supabase) return;
+    if (!chamadoId || !supabase) return;
 
-  const canal = supabase
-    .channel(`comentarios-chamado-${chamadoId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "comentarios_chamados",
-        filter: `chamado_id=eq.${chamadoId}`,
-      },
-      (payload) => {
-        setComentarios((atuais) => {
-          const existe = atuais.some((item) => item.id === payload.new.id);
-          if (existe) return atuais;
-          return [...atuais, payload.new];
-        });
-      }
-    )
-    .subscribe();
+    const canal = supabase
+      .channel(`comentarios-chamado-${chamadoId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "comentarios_chamados",
+          filter: `chamado_id=eq.${chamadoId}`,
+        },
+        (payload) => {
+          setComentarios((atuais) => {
+            const existe = atuais.some((item) => item.id === payload.new.id);
+            if (existe) return atuais;
+            return [...atuais, payload.new];
+          });
+        }
+      )
+      .subscribe();
 
-  return () => {
-    supabase.removeChannel(canal);
-  };
-}, [chamadoId]);
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [chamadoId]);
+
   async function carregarEquipes() {
     const { data } = await supabase
       .from("equipes")
@@ -170,6 +173,42 @@ async function carregarDetalhes() {
     if (carregarChamados) carregarChamados();
 
     setSalvando(false);
+  }
+
+  async function excluirChamado() {
+    if (!isGestor) return;
+
+    setErro("");
+    setMensagem("");
+    setSalvando(true);
+
+    await supabase
+      .from("comentarios_chamados")
+      .delete()
+      .eq("chamado_id", chamadoId);
+
+    await supabase
+      .from("anexos_chamados")
+      .delete()
+      .eq("chamado_id", chamadoId);
+
+    const { error } = await supabase
+      .from("chamados")
+      .delete()
+      .eq("id", chamadoId);
+
+    if (error) {
+      console.error(error);
+      setErro("Erro ao excluir chamado.");
+      setSalvando(false);
+      return;
+    }
+
+    if (carregarChamados) carregarChamados();
+
+    setSalvando(false);
+    setModalExcluir(false);
+    navigate("/chamados");
   }
 
   async function alterarStatus(novoStatus) {
@@ -290,6 +329,108 @@ async function carregarDetalhes() {
   return (
     <div style={styles.sectionCard}>
       <style>{`
+        .detalhe-wrap {
+          animation: detalheFade .35s ease;
+        }
+
+        @keyframes detalheFade {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .detalhe-actions {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+          margin-bottom: 22px;
+        }
+
+        .detalhe-action-buttons {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .detalhe-hero {
+          position: relative;
+          overflow: hidden;
+          border-radius: 30px;
+          padding: 26px;
+          background:
+            radial-gradient(circle at top right, rgba(47,123,255,.36), transparent 38%),
+            linear-gradient(135deg, #08295c 0%, #03152f 100%);
+          border: 1px solid rgba(59,130,246,.32);
+          color: white;
+          box-shadow: 0 24px 70px rgba(0,0,0,.28);
+        }
+
+        .detalhe-title {
+          margin: 14px 0 8px;
+          font-size: clamp(26px, 4vw, 40px);
+          letter-spacing: -1px;
+          line-height: 1.05;
+        }
+
+        .detalhe-subtitle {
+          color: rgba(255,255,255,.78);
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .detalhe-card {
+          background:
+            radial-gradient(circle at top right, rgba(47,123,255,.12), transparent 36%),
+            linear-gradient(135deg, #041f45 0%, #03152f 100%);
+          border: 1px solid rgba(59,130,246,.25);
+          border-radius: 24px;
+          padding: 20px;
+          box-shadow:
+            0 16px 45px rgba(0,0,0,.30),
+            inset 0 1px 0 rgba(255,255,255,.04);
+          backdrop-filter: blur(10px);
+          color: white;
+        }
+
+        .detalhe-card ${""} * {
+          color-scheme: dark;
+        }
+
+        .detalhe-section-title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 14px;
+          font-weight: 950;
+          font-size: 16px;
+          color: white;
+        }
+
+        .detalhe-card input,
+        .detalhe-card textarea,
+        .detalhe-card select {
+          background: #061b38 !important;
+          color: white !important;
+          border-color: rgba(59,130,246,.28) !important;
+        }
+
+        .status-workflow-btn {
+          transition: .2s ease;
+        }
+
+        .status-workflow-btn:hover {
+          transform: translateY(-2px);
+          filter: brightness(1.18);
+        }
+
         .modal-edicao-overlay {
           position: fixed;
           inset: 0;
@@ -312,13 +453,27 @@ async function carregarDetalhes() {
           box-shadow: 0 30px 90px rgba(0,0,0,.55);
         }
 
-        .status-workflow-btn {
-          transition: .2s ease;
+        .modal-excluir-card {
+          width: min(520px, 94vw);
+          background: linear-gradient(180deg, #061a2f 0%, #020b16 100%);
+          border-radius: 28px;
+          padding: 26px;
+          color: white;
+          box-shadow: 0 30px 100px rgba(0,0,0,.45);
+          border: 1px solid rgba(59,130,246,.35);
         }
 
-        .status-workflow-btn:hover {
-          transform: translateY(-2px);
-          filter: brightness(1.18);
+        .delete-icon {
+          width: 62px;
+          height: 62px;
+          border-radius: 22px;
+          display: grid;
+          place-items: center;
+          background: linear-gradient(135deg, rgba(255,70,70,.18), rgba(255,70,70,.08));
+          color: #ff6b6b;
+          font-size: 30px;
+          margin-bottom: 16px;
+          border: 1px solid rgba(255,107,107,.3);
         }
 
         .chat-area {
@@ -347,8 +502,9 @@ async function carregarDetalhes() {
 
         .chat-bubble.other {
           margin-right: auto;
-          background: rgba(255,255,255,.06);
-          color: inherit;
+          background: rgba(7,28,61,.92);
+          color: white;
+          border: 1px solid rgba(59,130,246,.18);
           border-bottom-left-radius: 4px;
         }
 
@@ -360,212 +516,304 @@ async function carregarDetalhes() {
           justify-content: space-between;
           gap: 12px;
         }
+
+        .foto-card {
+          transition: .22s ease;
+        }
+
+        .foto-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 20px 55px rgba(0,0,0,.18);
+        }
+
+        @media (max-width: 720px) {
+          .chat-bubble {
+            max-width: 92%;
+          }
+
+          .detalhe-hero {
+            padding: 20px;
+          }
+        }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-        <button style={styles.secondaryButton} onClick={() => navigate("/chamados")}>
-          ← Voltar
-        </button>
-
-        {isGestor && (
-          <button
-            style={styles.primaryButton}
-            onClick={() => {
-              setForm(chamado);
-              setModalEdicao(true);
-            }}
-          >
-            ✏️ Editar chamado
+      <div className="detalhe-wrap">
+        <div className="detalhe-actions">
+          <button style={styles.secondaryButton} onClick={() => navigate("/chamados")}>
+            ← Voltar
           </button>
-        )}
-      </div>
 
-      <div style={{ marginTop: 22 }}>
-        <div style={styles.badgeRow}>
-          <span style={styles.badge}>{chamado.codigo || `CH-${chamado.id}`}</span>
+          {isGestor && (
+            <div className="detalhe-action-buttons">
+              <button
+                style={styles.primaryButton}
+                onClick={() => {
+                  setForm(chamado);
+                  setModalEdicao(true);
+                }}
+              >
+                ✏️ Editar chamado
+              </button>
 
-          <span style={{ ...styles.badge, ...getBadgeStyle(colors, "status", chamado.status) }}>
-            {chamado.status}
-          </span>
-
-          <span style={{ ...styles.badge, ...getBadgeStyle(colors, "prioridade", chamado.prioridade) }}>
-            {chamado.prioridade || "Sem prioridade"}
-          </span>
+              <button
+                style={styles.dangerButton}
+                onClick={() => setModalExcluir(true)}
+                disabled={salvando}
+              >
+                🗑️ Excluir chamado
+              </button>
+            </div>
+          )}
         </div>
 
-        <h2 style={{ margin: "14px 0 4px", fontSize: 30 }}>
-          {chamado.equipamento || "Equipamento não informado"}
-        </h2>
+        <div className="detalhe-hero">
+          <div style={styles.badgeRow}>
+            <span style={{ ...styles.badge, background: "rgba(255,255,255,.16)", color: "white" }}>
+              {chamado.codigo || `CH-${chamado.id}`}
+            </span>
 
-        <div style={{ color: colors.muted }}>
-          {chamado.localidade || "Sem localidade"} • {chamado.tecnico || "Sem equipe"}
-        </div>
-      </div>
+            <span style={{ ...styles.badge, ...getBadgeStyle(colors, "status", chamado.status) }}>
+              {chamado.status}
+            </span>
 
-      {mensagem && (
-        <div style={{ ...styles.info, background: "#ecfff3", border: "1px solid #b7ecc8", color: "#0f7a34", marginTop: 16 }}>
-          {mensagem}
-        </div>
-      )}
+            <span style={{ ...styles.badge, ...getBadgeStyle(colors, "prioridade", chamado.prioridade) }}>
+              {chamado.prioridade || "Sem prioridade"}
+            </span>
+          </div>
 
-      {erro && (
-        <div style={{ ...styles.info, background: "#fff0f0", border: "1px solid #f3bbbb", color: colors.danger, marginTop: 16 }}>
-          {erro}
-        </div>
-      )}
+          <h2 className="detalhe-title">
+            {chamado.equipamento || "Equipamento não informado"}
+          </h2>
 
-      {isGestor && (
-        <div style={{ marginTop: 24 }}>
-          <div style={styles.label}>🔄 Status do chamado</div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {statusOptions.map((status) => {
-              const ativo = normalizar(status) === normalizar(chamado.status);
-
-              return (
-                <button
-                  key={status}
-                  className="status-workflow-btn"
-                  style={{
-                    ...styles.secondaryButton,
-                    minHeight: 48,
-                    ...getBadgeStyle(colors, "status", status),
-                    fontWeight: 900,
-                    boxShadow: ativo ? "0 0 20px currentColor" : "none",
-                    opacity: ativo ? 1 : 0.72,
-                  }}
-                  onClick={() => alterarStatus(status)}
-                  disabled={salvando}
-                >
-                  {status}
-                </button>
-              );
-            })}
+          <div className="detalhe-subtitle">
+            {chamado.localidade || "Sem localidade"} • {chamado.tecnico || "Sem equipe"}
           </div>
         </div>
-      )}
 
-      <div style={{ marginTop: 28 }}>
-        <div style={styles.label}>📋 Dados do chamado</div>
+        {mensagem && (
+          <div
+            style={{
+              ...styles.info,
+              background: "#ecfff3",
+              border: "1px solid #b7ecc8",
+              color: "#0f7a34",
+              marginTop: 16,
+            }}
+          >
+            {mensagem}
+          </div>
+        )}
 
-        <div style={styles.formGrid}>
-          {dadosResumo.map(([label, valor]) => (
-            <div key={label} style={styles.softBox}>
-              <strong>{label}</strong>
-              <div style={{ color: colors.muted, marginTop: 6 }}>{valor || "-"}</div>
+        {erro && (
+          <div
+            style={{
+              ...styles.info,
+              background: "#fff0f0",
+              border: "1px solid #f3bbbb",
+              color: colors.danger,
+              marginTop: 16,
+            }}
+          >
+            {erro}
+          </div>
+        )}
+
+        {isGestor && (
+          <div className="detalhe-card" style={{ marginTop: 24 }}>
+            <div className="detalhe-section-title">🔄 Status do chamado</div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {statusOptions.map((status) => {
+                const ativo = normalizar(status) === normalizar(chamado.status);
+
+                return (
+                  <button
+                    key={status}
+                    className="status-workflow-btn"
+                    style={{
+                      ...styles.secondaryButton,
+                      minHeight: 48,
+                      ...getBadgeStyle(colors, "status", status),
+                      fontWeight: 900,
+                      boxShadow: ativo ? "0 0 20px currentColor" : "none",
+                      opacity: ativo ? 1 : 0.72,
+                    }}
+                    onClick={() => alterarStatus(status)}
+                    disabled={salvando}
+                  >
+                    {status}
+                  </button>
+                );
+              })}
             </div>
-          ))}
+          </div>
+        )}
+
+        <div className="detalhe-card" style={{ marginTop: 24 }}>
+          <div className="detalhe-section-title">📋 Dados do chamado</div>
+
+          <div style={styles.formGrid}>
+            {dadosResumo.map(([label, valor]) => (
+              <div key={label} style={styles.softBox}>
+                <strong>{label}</strong>
+                <div style={{ color: "#b9c8de", marginTop: 6 }}>{valor || "-"}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 18 }}>
+            <div style={styles.label}>📝 Problema / descrição</div>
+            <div style={{ ...styles.softBox, lineHeight: 1.65 }}>
+              {chamado.problema || "Sem descrição."}
+            </div>
+          </div>
         </div>
 
-        <div style={{ marginTop: 18 }}>
-          <div style={styles.label}>📝 Problema / descrição</div>
-          <div style={styles.softBox}>{chamado.problema || "Sem descrição."}</div>
+        <div className="detalhe-card" style={{ marginTop: 24 }}>
+          <div className="detalhe-section-title">📸 Imagens do chamado</div>
+
+          {fotos.length === 0 && <div style={styles.softBox}>Nenhuma imagem anexada.</div>}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {fotos.map((foto) => (
+              <div key={foto.id} className="foto-card" style={{ ...styles.softBox, padding: 8 }}>
+                <img
+                  src={foto.url_arquivo}
+                  alt={foto.nome_arquivo}
+                  onClick={() => setFotoAberta(foto.url_arquivo)}
+                  style={{
+                    width: "100%",
+                    height: 145,
+                    objectFit: "cover",
+                    borderRadius: 16,
+                    cursor: "pointer",
+                  }}
+                />
+
+                <div style={{ fontSize: 12, color: "#b9c8de", marginTop: 8 }}>
+                  {foto.nome_arquivo}
+                </div>
+
+                {isGestor && (
+                  <button
+                    style={{ ...styles.dangerButton, minHeight: 40, marginTop: 8, width: "100%" }}
+                    onClick={() => excluirFoto(foto)}
+                  >
+                    🗑️ Excluir
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div style={{ marginTop: 30 }}>
-        <div style={styles.label}>📸 Imagens do chamado</div>
+        <div className="detalhe-card" style={{ marginTop: 24 }}>
+          <div className="detalhe-section-title">💬 Chat do chamado</div>
 
-        {fotos.length === 0 && <div style={styles.softBox}>Nenhuma imagem anexada.</div>}
+          <div style={{ ...styles.softBox, padding: 18 }}>
+            <div className="chat-area">
+              {comentarios.map((item) => {
+                const meuComentario =
+                  item.autor === usuario?.nome || item.autor === usuario?.login;
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
-          {fotos.map((foto) => (
-            <div key={foto.id} style={{ ...styles.softBox, padding: 8 }}>
-              <img
-                src={foto.url_arquivo}
-                alt={foto.nome_arquivo}
-                onClick={() => setFotoAberta(foto.url_arquivo)}
-                style={{
-                  width: "100%",
-                  height: 140,
-                  objectFit: "cover",
-                  borderRadius: 14,
-                  cursor: "pointer",
+                return (
+                  <div key={item.id} className={`chat-bubble ${meuComentario ? "me" : "other"}`}>
+                    <div className="chat-meta">
+                      <strong>{item.autor || "Sistema"}</strong>
+                      <span>
+                        {item.created_at
+                          ? new Date(item.created_at).toLocaleString("pt-BR")
+                          : ""}
+                      </span>
+                    </div>
+
+                    <div>{item.comentario}</div>
+
+                    {isGestor && (
+                      <button
+                        onClick={() => excluirComentario(item.id)}
+                        style={{
+                          marginTop: 10,
+                          border: "none",
+                          background: "rgba(255,255,255,.12)",
+                          color: "inherit",
+                          borderRadius: 10,
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🗑️ Excluir
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              {comentarios.length === 0 && (
+                <div style={{ color: "#b9c8de" }}>Nenhuma mensagem no chamado.</div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
+              <input
+                style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                placeholder="Digite uma mensagem..."
+                value={comentario}
+                onChange={(e) => setComentario(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") adicionarComentario();
                 }}
               />
 
-              <div style={{ fontSize: 12, color: colors.muted, marginTop: 8 }}>
-                {foto.nome_arquivo}
-              </div>
-
-              {isGestor && (
-                <button
-                  style={{ ...styles.dangerButton, minHeight: 40, marginTop: 8, width: "100%" }}
-                  onClick={() => excluirFoto(foto)}
-                >
-                  🗑️ Excluir
-                </button>
-              )}
+              <button style={styles.primaryButton} onClick={adicionarComentario}>
+                Enviar
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 30 }}>
-        <div style={styles.label}>💬 Chat do chamado</div>
-
-        <div style={{ ...styles.softBox, padding: 18 }}>
-          <div className="chat-area">
-            {comentarios.map((item) => {
-              const meuComentario =
-                item.autor === usuario?.nome || item.autor === usuario?.login;
-
-              return (
-                <div key={item.id} className={`chat-bubble ${meuComentario ? "me" : "other"}`}>
-                  <div className="chat-meta">
-                    <strong>{item.autor || "Sistema"}</strong>
-                    <span>
-                      {item.created_at
-                        ? new Date(item.created_at).toLocaleString("pt-BR")
-                        : ""}
-                    </span>
-                  </div>
-
-                  <div>{item.comentario}</div>
-
-                  {isGestor && (
-                    <button
-                      onClick={() => excluirComentario(item.id)}
-                      style={{
-                        marginTop: 10,
-                        border: "none",
-                        background: "rgba(255,255,255,.12)",
-                        color: "inherit",
-                        borderRadius: 10,
-                        padding: "6px 10px",
-                        cursor: "pointer",
-                        fontWeight: 800,
-                      }}
-                    >
-                      🗑️ Excluir
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-
-            {comentarios.length === 0 && (
-              <div style={{ color: colors.muted }}>Nenhuma mensagem no chamado.</div>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
-            <input
-              style={{ ...styles.input, flex: 1, minWidth: 260 }}
-              placeholder="Digite uma mensagem..."
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") adicionarComentario();
-              }}
-            />
-
-            <button style={styles.primaryButton} onClick={adicionarComentario}>
-              Enviar
-            </button>
           </div>
         </div>
       </div>
+
+      {modalExcluir && (
+        <div className="modal-edicao-overlay">
+          <div className="modal-excluir-card">
+            <div className="delete-icon">🗑️</div>
+
+            <h2 style={{ margin: "0 0 8px", color: "white" }}>
+              Excluir chamado?
+            </h2>
+
+            <p style={{ margin: 0, color: "#9fb1cc", lineHeight: 1.6 }}>
+              Essa ação vai remover o chamado, os comentários e os anexos vinculados a ele.
+              Depois de excluir, não será possível desfazer.
+            </p>
+
+            <div style={{ marginTop: 22, display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <button
+                style={styles.dangerButton}
+                onClick={excluirChamado}
+                disabled={salvando}
+              >
+                {salvando ? "Excluindo..." : "Sim, excluir chamado"}
+              </button>
+
+              <button
+                style={styles.secondaryButton}
+                onClick={() => setModalExcluir(false)}
+                disabled={salvando}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalEdicao && (
         <div className="modal-edicao-overlay">

@@ -1,749 +1,787 @@
-import React, { useMemo, useState } from "react";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
-import { LOGO_URL } from "../App";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  LabelList,
   CartesianGrid,
+  Legend,
 } from "recharts";
+import { supabase } from "../App";
 
-function normalizar(texto) {
-  return String(texto || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+const azul = "#1e9bff";
+const verde = "#22c55e";
+const laranja = "#f59e0b";
+const vermelho = "#ef4444";
+const roxo = "#8b5cf6";
+const amarelo = "#facc15";
+
+const prioridadeCores = {
+  Crítica: vermelho,
+  Critica: vermelho,
+  Alta: laranja,
+  Média: amarelo,
+  Media: amarelo,
+  Baixa: verde,
+};
+
+function normalizar(v, padrao = "Não informado") {
+  return String(v || padrao).trim();
 }
 
-function corPrioridade(nome) {
-  const n = normalizar(nome);
-  if (n === "baixa") return "#30d158";
-  if (n === "media") return "#facc15";
-  if (n === "alta") return "#ff9f1a";
-  if (n === "critica" || n === "critico") return "#ff3131";
-  return "#9ca3af";
+function formatarData(data) {
+  if (!data) return "-";
+  return new Date(data).toLocaleDateString("pt-BR");
 }
 
-function agrupar(lista, campo) {
+function agrupar(lista, campo, limite = 8) {
   const mapa = {};
+
   lista.forEach((item) => {
-    const chave = item[campo] || "Não informado";
+    const chave = normalizar(item[campo]);
     mapa[chave] = (mapa[chave] || 0) + 1;
   });
 
   return Object.entries(mapa)
     .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limite);
 }
 
-function TooltipDark() {
-  return (
-    <Tooltip
-      contentStyle={{
-        background: "#061a2f",
-        border: "1px solid #1e6bb8",
-        borderRadius: 12,
-        color: "#fff",
-        boxShadow: "0 0 20px rgba(30,155,255,.35)",
-      }}
-      labelStyle={{ color: "#9fb1cc" }}
-      itemStyle={{ color: "#fff" }}
-      cursor={{ fill: "rgba(30,155,255,0.08)" }}
-    />
-  );
-}
+function agruparMultiCampo(lista, campos, limite = 8) {
+  const mapa = {};
 
-function CardKpi({ titulo, valor, detalhe, cor = "#1e9bff" }) {
-  return (
-    <div
-      style={{
-        border: `1px solid ${cor}`,
-        background: "#ffffff",
-        borderRadius: 16,
-        padding: 16,
-        color: "#0f172a",
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>
-        {titulo}
-      </div>
-      <div style={{ fontSize: 32, fontWeight: 950, color: cor }}>{valor}</div>
-      <div style={{ fontSize: 12, color: "#64748b" }}>{detalhe}</div>
-    </div>
-  );
-}
+  lista.forEach((item) => {
+    let chave = "Não informado";
 
-function TextoResumo({ titulo, dados }) {
-  return (
-    <div
-      style={{
-        border: "1px solid #cbd5e1",
-        borderRadius: 16,
-        padding: 18,
-        background: "#ffffff",
-      }}
-    >
-      <h3 style={{ marginTop: 0, color: "#0f2f5f" }}>{titulo}</h3>
-
-      {dados.length === 0 && (
-        <div style={{ color: "#64748b" }}>Nenhum dado encontrado.</div>
-      )}
-
-      <div style={{ display: "grid", gap: 8 }}>
-        {dados.map((item) => (
-          <div
-            key={item.name}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 16,
-              borderBottom: "1px solid #e2e8f0",
-              paddingBottom: 7,
-              color: "#334155",
-              fontSize: 16,
-            }}
-          >
-            <strong>{item.name}</strong>
-            <span>
-              {item.value} chamado{item.value > 1 ? "s" : ""}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ReportPage({ children, pageNumber, totalPages }) {
-  return (
-    <div
-      className="pdf-page"
-      style={{
-        width: 1123,
-        minHeight: 794,
-        background: "#ffffff",
-        color: "#0f172a",
-        padding: 38,
-        boxSizing: "border-box",
-        fontFamily: "Arial, sans-serif",
-        position: "relative",
-      }}
-    >
-      {children}
-
-      <div
-        style={{
-          position: "absolute",
-          bottom: 18,
-          right: 38,
-          color: "#64748b",
-          fontSize: 13,
-        }}
-      >
-        Página {pageNumber} de {totalPages}
-      </div>
-    </div>
-  );
-}
-
-export default function AnalyticsPage({ styles, tickets = [] }) {
-  const [periodo, setPeriodo] = useState("todos");
-  const [localidade, setLocalidade] = useState("todas");
-  const [status, setStatus] = useState("todos");
-  const [prioridade, setPrioridade] = useState("todas");
-  const [equipe, setEquipe] = useState("todas");
-  const [previewAberto, setPreviewAberto] = useState(false);
-  const [gerandoPdf, setGerandoPdf] = useState(false);
-
-  const localidades = [...new Set(tickets.map((t) => t.localidade).filter(Boolean))];
-  const statusList = [...new Set(tickets.map((t) => t.status).filter(Boolean))];
-  const prioridades = [...new Set(tickets.map((t) => t.prioridade).filter(Boolean))];
-  const equipes = [...new Set(tickets.map((t) => t.tecnico).filter(Boolean))];
-
-  const filtrados = useMemo(() => {
-    const hoje = new Date();
-
-    return tickets.filter((t) => {
-      const dataChamado = t.created_at ? new Date(t.created_at) : null;
-
-      if (periodo !== "todos" && dataChamado) {
-        const diff = Math.floor((hoje - dataChamado) / (1000 * 60 * 60 * 24));
-        if (periodo === "7" && diff > 7) return false;
-        if (periodo === "30" && diff > 30) return false;
-        if (periodo === "90" && diff > 90) return false;
+    for (const campo of campos) {
+      if (item[campo]) {
+        chave = normalizar(item[campo]);
+        break;
       }
+    }
 
-      if (localidade !== "todas" && t.localidade !== localidade) return false;
-      if (status !== "todos" && t.status !== status) return false;
-      if (prioridade !== "todas" && t.prioridade !== prioridade) return false;
-      if (equipe !== "todas" && t.tecnico !== equipe) return false;
+    mapa[chave] = (mapa[chave] || 0) + 1;
+  });
 
-      return true;
-    });
-  }, [tickets, periodo, localidade, status, prioridade, equipe]);
+  return Object.entries(mapa)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limite);
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div
+      style={{
+        background: "#061a2f",
+        border: "1px solid rgba(30,155,255,.65)",
+        borderRadius: 12,
+        padding: "10px 12px",
+        color: "#eaf3ff",
+        boxShadow: "0 12px 35px rgba(0,0,0,.45)",
+        fontSize: 12,
+        fontWeight: 800,
+      }}
+    >
+      <div style={{ color: "#9fb1cc", marginBottom: 4 }}>
+        {label || payload[0]?.name}
+      </div>
+      <div style={{ color: payload[0]?.color || azul }}>
+        valor: {payload[0]?.value}
+      </div>
+    </div>
+  );
+}
+
+export default function AnalyticsPage({ styles, colors }) {
+  const [chamados, setChamados] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [agora, setAgora] = useState(new Date());
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAgora(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  async function carregar() {
+    setCarregando(true);
+
+    const { data, error } = await supabase
+      .from("chamados")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      setChamados([]);
+    } else {
+      setChamados(data || []);
+    }
+
+    setCarregando(false);
+  }
 
   const dados = useMemo(() => {
-    const total = filtrados.length;
+    const total = chamados.length;
 
-    const fechados = filtrados.filter((t) =>
-      ["Fechado", "Concluído", "Finalizado", "Encerrado"].includes(t.status)
+    const abertos = chamados.filter((c) =>
+      ["aberto", "aberta", "pendente"].includes(
+        String(c.status || "").toLowerCase()
+      )
     ).length;
 
-    const abertos = total - fechados;
-
-    const emAndamento = filtrados.filter((t) =>
-      ["Em andamento", "Em execução"].includes(t.status)
+    const execucao = chamados.filter((c) =>
+      ["em execução", "em execucao", "andamento", "em andamento"].includes(
+        String(c.status || "").toLowerCase()
+      )
     ).length;
 
-    const criticos = filtrados.filter((t) => {
-      const p = normalizar(t.prioridade);
-      const c = normalizar(t.criticidade);
-      return p.includes("crit") || c === "severa";
-    }).length;
-
-    const slaBase = filtrados.filter((t) => t.sla);
-    const slaOk = slaBase.filter(
-      (t) => Number(t.sla_consumido || 0) <= Number(t.sla)
+    const finalizados = chamados.filter((c) =>
+      ["finalizado", "finalizada", "concluído", "concluido", "fechado"].includes(
+        String(c.status || "").toLowerCase()
+      )
     ).length;
 
-    const sla = slaBase.length ? Math.round((slaOk / slaBase.length) * 100) : 0;
-    const taxaResolucao = total ? Math.round((fechados / total) * 100) : 0;
+    const criticos = chamados.filter((c) =>
+      String(c.prioridade || "").toLowerCase().includes("cr")
+    ).length;
+
+    const slaAtendido =
+      total > 0 ? Math.round(((total - criticos) / total) * 100) : 0;
+
+    const porPrioridade = agrupar(chamados, "prioridade");
+    const porEstacao = agruparMultiCampo(chamados, [
+      "localidade",
+      "estacao",
+      "unidade",
+    ]);
+    const porEquipe = agruparMultiCampo(chamados, [
+      "tecnico",
+      "equipe",
+      "responsavel",
+    ]);
+    const porTipo = agruparMultiCampo(chamados, [
+      "tipo_falha",
+      "tipo",
+      "categoria",
+    ]);
+
+    const recentes = chamados.slice(0, 6);
 
     return {
       total,
       abertos,
-      fechados,
-      emAndamento,
+      execucao,
+      finalizados,
       criticos,
-      sla,
-      taxaResolucao,
-      porPrioridade: agrupar(filtrados, "prioridade"),
-      porLocalidade: agrupar(filtrados, "localidade"),
-      porStatus: agrupar(filtrados, "status"),
-      porTipo: agrupar(filtrados, "tipo_falha"),
-      porEquipe: agrupar(filtrados, "tecnico"),
+      slaAtendido,
+      porPrioridade,
+      porEstacao,
+      porEquipe,
+      porTipo,
+      recentes,
     };
-  }, [filtrados]);
-
-  const periodoTexto =
-    periodo === "todos" ? "Todo o período" : `Últimos ${periodo} dias`;
-
-  async function exportarPDF() {
-    setGerandoPdf(true);
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const paginas = document.querySelectorAll(".pdf-stage-hidden .pdf-page");
-      const pdf = new jsPDF("landscape", "mm", "a4");
-
-      for (let i = 0; i < paginas.length; i++) {
-        const canvas = await html2canvas(paginas[i], {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-        });
-
-        const imgData = canvas.toDataURL("image/png");
-        const largura = pdf.internal.pageSize.getWidth();
-        const altura = pdf.internal.pageSize.getHeight();
-
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, 0, largura, altura);
-      }
-
-      pdf.save(
-        `relatorio-executivo-${new Date().toISOString().slice(0, 10)}.pdf`
-      );
-    } catch (error) {
-      console.error(error);
-      alert("Não foi possível gerar o PDF.");
-    }
-
-    setGerandoPdf(false);
-  }
-
-  function RelatorioCompleto() {
-    const totalPaginas = 4;
-
-    return (
-      <>
-        <ReportPage pageNumber={1} totalPages={totalPaginas}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <img
-              src={LOGO_URL}
-              alt="Logo"
-              style={{ width: 170, background: "white", borderRadius: 8 }}
-            />
-
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
-                RELATÓRIO EXECUTIVO
-              </div>
-              <div style={{ color: "#64748b", marginTop: 4 }}>
-                Gestão de Chamados
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 70 }}>
-            <div
-              style={{
-                fontSize: 46,
-                fontWeight: 900,
-                color: "#0f2f5f",
-                lineHeight: 1.1,
-              }}
-            >
-              RELATÓRIO ANALÍTICO
-              <br />
-              DE CHAMADOS
-            </div>
-
-            <div
-              style={{
-                marginTop: 22,
-                width: 120,
-                height: 5,
-                background: "#1e9bff",
-              }}
-            />
-
-            <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
-              Período: <strong>{periodoTexto}</strong>
-            </div>
-
-            <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
-              Estação: {localidade === "todas" ? "Todas" : localidade} • Status:{" "}
-              {status === "todos" ? "Todos" : status} • Prioridade:{" "}
-              {prioridade === "todas" ? "Todas" : prioridade} • Equipe:{" "}
-              {equipe === "todas" ? "Todas" : equipe}
-            </div>
-          </div>
-
-          <div
-            style={{
-              position: "absolute",
-              left: 38,
-              right: 38,
-              bottom: 65,
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 16,
-            }}
-          >
-            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados filtrados" cor="#1e3a8a" />
-            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" />
-            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Concluídos" cor="#16a34a" />
-            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Alta atenção" cor="#dc2626" />
-            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" />
-          </div>
-
-          <div style={{ position: "absolute", bottom: 40, right: 38, color: "#64748b" }}>
-            Gerado em {new Date().toLocaleString("pt-BR")}
-          </div>
-        </ReportPage>
-
-        <ReportPage pageNumber={2} totalPages={totalPaginas}>
-          <h1 style={{ color: "#0f2f5f", margin: 0 }}>Sumário Executivo</h1>
-
-          <p style={{ color: "#475569", fontSize: 18, marginTop: 16, lineHeight: 1.6 }}>
-            Este relatório apresenta uma visão consolidada dos chamados registrados
-            na plataforma, considerando os filtros aplicados. O objetivo é apoiar
-            a análise operacional, priorização de atendimento, acompanhamento de SLA
-            e tomada de decisão gerencial.
-          </p>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 16,
-              marginTop: 32,
-            }}
-          >
-            <CardKpi titulo="Total" valor={dados.total} detalhe="Chamados" cor="#1e3a8a" />
-            <CardKpi titulo="Abertos" valor={dados.abertos} detalhe="Pendentes" cor="#2563eb" />
-            <CardKpi titulo="Fechados" valor={dados.fechados} detalhe="Finalizados" cor="#16a34a" />
-            <CardKpi titulo="Críticos" valor={dados.criticos} detalhe="Atenção imediata" cor="#dc2626" />
-            <CardKpi titulo="SLA" valor={`${dados.sla}%`} detalhe="Atendido" cor="#7c3aed" />
-          </div>
-
-          <div
-            style={{
-              marginTop: 40,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 26,
-            }}
-          >
-            <div>
-              <h2 style={{ color: "#0f2f5f" }}>Resumo Operacional</h2>
-              <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
-                <li>Taxa de resolução: {dados.taxaResolucao}%</li>
-                <li>Chamados em andamento: {dados.emAndamento}</li>
-                <li>Chamados críticos: {dados.criticos}</li>
-                <li>SLA atendido: {dados.sla}%</li>
-              </ul>
-            </div>
-
-            <div>
-              <h2 style={{ color: "#0f2f5f" }}>Filtros Aplicados</h2>
-              <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
-                <li>Período: {periodoTexto}</li>
-                <li>Estação: {localidade === "todas" ? "Todas" : localidade}</li>
-                <li>Status: {status === "todos" ? "Todos" : status}</li>
-                <li>Prioridade: {prioridade === "todas" ? "Todas" : prioridade}</li>
-                <li>Equipe: {equipe === "todas" ? "Todas" : equipe}</li>
-              </ul>
-            </div>
-          </div>
-
-          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
-            Consórcio União OBRACON • Relatório Executivo
-          </div>
-        </ReportPage>
-
-        <ReportPage pageNumber={3} totalPages={totalPaginas}>
-          <h1 style={{ color: "#0f2f5f", margin: 0 }}>
-            Distribuição dos Chamados
-          </h1>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 22,
-              marginTop: 28,
-            }}
-          >
-            <TextoResumo titulo="Chamados por estação" dados={dados.porLocalidade} />
-            <TextoResumo titulo="Chamados por equipe" dados={dados.porEquipe} />
-            <TextoResumo titulo="Chamados por status" dados={dados.porStatus} />
-            <TextoResumo titulo="Chamados por prioridade" dados={dados.porPrioridade} />
-          </div>
-
-          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
-            Documento pronto para impressão • Dados organizados para leitura gerencial
-          </div>
-        </ReportPage>
-
-        <ReportPage pageNumber={4} totalPages={totalPaginas}>
-          <h1 style={{ color: "#0f2f5f", margin: 0 }}>Conclusão Gerencial</h1>
-
-          <div style={{ marginTop: 30, fontSize: 18, lineHeight: 1.7, color: "#334155" }}>
-            <p>
-              A base analisada contém <strong>{dados.total}</strong> chamados dentro dos
-              filtros selecionados. Deste total, <strong>{dados.abertos}</strong> permanecem
-              em aberto e <strong>{dados.fechados}</strong> encontram-se fechados.
-            </p>
-
-            <p>
-              O índice de SLA atendido está em <strong>{dados.sla}%</strong>, enquanto
-              a taxa de resolução do período está em <strong>{dados.taxaResolucao}%</strong>.
-            </p>
-
-            <p>
-              Foram identificados <strong>{dados.criticos}</strong> chamados classificados
-              como críticos ou severos, recomendando acompanhamento prioritário.
-            </p>
-          </div>
-
-          <div
-            style={{
-              marginTop: 36,
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: 14,
-              padding: 20,
-            }}
-          >
-            <h2 style={{ color: "#0f2f5f", marginTop: 0 }}>Recomendações</h2>
-            <ul style={{ fontSize: 17, lineHeight: 1.8, color: "#334155" }}>
-              <li>Monitorar chamados críticos diariamente.</li>
-              <li>Acompanhar chamados em andamento e aguardando compra.</li>
-              <li>Usar os dados por estação para identificar recorrências operacionais.</li>
-              <li>Revisar causas de falhas recorrentes e priorizar ações preventivas.</li>
-            </ul>
-          </div>
-
-          <div style={{ position: "absolute", bottom: 40, left: 38, color: "#64748b" }}>
-            Consórcio União OBRACON • Plataforma Corporativa de Chamados
-          </div>
-        </ReportPage>
-      </>
-    );
-  }
+  }, [chamados]);
 
   return (
-    <div style={styles.sectionCard}>
+    <div className="analytics-premium">
       <style>{`
-        .analytics-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        .analytics-premium {
+          width: 100%;
+          color: #eaf3ff;
+          overflow-x: hidden;
+        }
+
+        .analytics-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
           gap: 16px;
+          margin-bottom: 18px;
         }
 
-        .analytics-card {
-          background: linear-gradient(180deg, #061a2f 0%, #020b16 100%);
-          border: 1px solid #1e6bb8;
-          border-radius: 16px;
-          padding: 16px;
+        .analytics-title h1 {
+          margin: 0;
+          font-size: 36px;
+          font-weight: 950;
+          letter-spacing: .03em;
+          text-transform: uppercase;
+        }
+
+        .analytics-title span {
+          color: #00d9ff;
+          font-size: 13px;
+          font-weight: 950;
+          letter-spacing: .22em;
+          text-transform: uppercase;
+        }
+
+        .clock-card {
+          min-width: 150px;
+          padding: 15px 18px;
+          border-radius: 18px;
+          border: 1px solid rgba(30,155,255,.55);
+          background:
+            radial-gradient(circle at top right, rgba(30,155,255,.18), transparent 42%),
+            linear-gradient(180deg, rgba(8,29,54,.98), rgba(2,10,22,.98));
+          text-align: center;
+          box-shadow:
+            0 0 28px rgba(30,155,255,.18),
+            inset 0 0 22px rgba(255,255,255,.03);
+        }
+
+        .clock-card strong {
+          display: block;
+          font-size: 24px;
+          font-weight: 950;
+          letter-spacing: .05em;
           color: white;
-          min-height: 310px;
-          box-shadow: 0 0 24px rgba(0,120,255,.10);
+          text-shadow: 0 0 12px rgba(255,255,255,.18);
         }
 
-        .analytics-card h3 {
+        .clock-card small {
+          display: block;
+          margin-top: 3px;
+          color: #9fb1cc;
+          font-weight: 800;
+        }
+
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(160px, 1fr));
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        .kpi-card {
+          position: relative;
+          min-height: 96px;
+          padding: 18px;
+          border-radius: 12px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background:
+            radial-gradient(circle at right bottom, var(--glow-soft), transparent 38%),
+            linear-gradient(180deg, rgba(5,22,40,.96), rgba(2,10,20,.98));
+          box-shadow: 0 16px 45px rgba(0,0,0,.25);
+        }
+
+        .kpi-card::after {
+          content: "";
+          position: absolute;
+          width: 120px;
+          height: 120px;
+          border-radius: 50%;
+          right: -44px;
+          bottom: -44px;
+          background: var(--glow);
+          opacity: .14;
+        }
+
+        .kpi-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          position: relative;
+          z-index: 1;
+        }
+
+        .kpi-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          display: grid;
+          place-items: center;
+          font-size: 24px;
+          background: var(--bg);
+          box-shadow: 0 0 22px var(--shadow);
+        }
+
+        .kpi-label {
+          color: #b8c7dd;
+          text-transform: uppercase;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: .05em;
+        }
+
+        .kpi-value {
+          margin-top: 6px;
+          font-size: 30px;
+          font-weight: 950;
+          line-height: 1;
+          color: white;
+        }
+
+        .kpi-sub {
+          margin-top: 6px;
+          color: #00e5ff;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .dash-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr 1fr;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+
+        .dash-grid-bottom {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+
+        .panel {
+          border-radius: 12px;
+          border: 1px solid rgba(30,155,255,.55);
+          background:
+            radial-gradient(circle at top right, rgba(30,155,255,.10), transparent 36%),
+            linear-gradient(180deg, rgba(5,22,40,.96), rgba(1,8,18,.98));
+          padding: 18px;
+          min-height: 260px;
+          box-shadow: 0 16px 45px rgba(0,0,0,.22);
+          overflow: hidden;
+        }
+
+        .panel h3 {
           margin: 0 0 14px;
           font-size: 15px;
+          font-weight: 950;
+          text-transform: uppercase;
+          letter-spacing: .03em;
+          color: #f2f7ff;
+        }
+
+        .panel-foot {
+          color: #9fb1cc;
+          font-size: 12px;
+          margin-top: 10px;
+        }
+
+        .recent-list {
+          display: grid;
+          gap: 10px;
+        }
+
+        .recent-item {
+          display: grid;
+          grid-template-columns: 1fr auto auto;
+          gap: 10px;
+          align-items: center;
+          padding: 10px 0;
+          border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+
+        .recent-item strong {
+          font-size: 13px;
+        }
+
+        .recent-item small {
+          color: #9fb1cc;
+          display: block;
+          margin-top: 3px;
+        }
+
+        .priority-pill {
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 12px;
           font-weight: 900;
-          color: #f4f8ff;
+          border: 1px solid currentColor;
         }
 
-        .pdf-stage-hidden {
-          position: absolute;
-          left: -99999px;
-          top: 0;
-          width: 1123px;
-          z-index: -1;
+        .sla-wrap {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          align-items: center;
+          gap: 14px;
         }
 
-        .preview-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,.78);
-          z-index: 9999;
-          overflow: auto;
-          padding: 30px;
+        .sla-number {
+          width: 170px;
+          height: 170px;
+          border-radius: 50%;
+          margin: auto;
+          display: grid;
+          place-items: center;
+          background:
+            radial-gradient(circle, #09213d 55%, transparent 56%),
+            conic-gradient(#1e9bff ${dados.slaAtendido}%, rgba(255,255,255,.08) 0);
+          box-shadow: 0 0 30px rgba(30,155,255,.25);
         }
 
-        .preview-actions {
-          position: sticky;
-          top: 0;
-          display: flex;
-          justify-content: flex-end;
+        .sla-number strong {
+          font-size: 36px;
+          display: block;
+          text-align: center;
+        }
+
+        .sla-number span {
+          font-size: 11px;
+          color: #9fb1cc;
+          font-weight: 900;
+          display: block;
+          text-align: center;
+        }
+
+        .sla-meta {
+          display: grid;
           gap: 12px;
-          margin-bottom: 20px;
-          z-index: 2;
         }
 
-        .preview-page {
-          width: 1123px;
-          margin: 0 auto 26px;
-          box-shadow: 0 20px 60px rgba(0,0,0,.45);
+        .sla-meta div {
+          background: rgba(255,255,255,.045);
+          border: 1px solid rgba(255,255,255,.08);
+          border-radius: 14px;
+          padding: 12px;
+        }
+
+        .empty {
+          color: #9fb1cc;
+          padding: 20px;
+          text-align: center;
+        }
+
+        .recharts-wrapper,
+        .recharts-surface {
+          background: transparent !important;
         }
 
         .recharts-default-tooltip {
           background: #061a2f !important;
-          border: 1px solid #1e6bb8 !important;
+          border: 1px solid rgba(30,155,255,.65) !important;
           border-radius: 12px !important;
-          color: white !important;
-          box-shadow: 0 0 20px rgba(30,155,255,.35) !important;
+          color: #eaf3ff !important;
+          box-shadow: 0 12px 35px rgba(0,0,0,.45) !important;
+        }
+
+        .recharts-tooltip-label {
+          color: #9fb1cc !important;
         }
 
         .recharts-legend-item-text {
-          color: #dce8f8 !important;
+          color: #cfe2ff !important;
         }
 
-        .recharts-text {
-          fill: #cfe8ff;
-          font-weight: 700;
+        @media (max-width: 1300px) {
+          .kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .dash-grid,
+          .dash-grid-bottom {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
         }
       `}</style>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <div style={{ ...styles.label, marginBottom: 6 }}>
-            📊 Analytics / Relatório Executivo
-          </div>
-          <div style={{ color: "#9fb1cc" }}>
-            Pré-visualize e baixe um relatório profissional com logo, resumo e dados organizados.
-          </div>
+      <div className="analytics-header">
+        <div className="analytics-title">
+          <h1>PAINEL GERENCIAL — GESTÃO DE CHAMADOS</h1>
+          <span>Visão geral da operação em tempo real</span>
         </div>
 
-        <img
-          src={LOGO_URL}
-          alt="Logo"
-          style={{ width: 120, borderRadius: 12, background: "white" }}
-        />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 12,
-          marginTop: 22,
-        }}
-      >
-        <select style={styles.input} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
-          <option value="todos">Todo período</option>
-          <option value="7">Últimos 7 dias</option>
-          <option value="30">Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-        </select>
-
-        <select style={styles.input} value={localidade} onChange={(e) => setLocalidade(e.target.value)}>
-          <option value="todas">Todas as estações</option>
-          {localidades.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-
-        <select style={styles.input} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="todos">Todos os status</option>
-          {statusList.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-
-        <select style={styles.input} value={prioridade} onChange={(e) => setPrioridade(e.target.value)}>
-          <option value="todas">Todas as prioridades</option>
-          {prioridades.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-
-        <select style={styles.input} value={equipe} onChange={(e) => setEquipe(e.target.value)}>
-          <option value="todas">Todas as equipes</option>
-          {equipes.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-
-        <button style={styles.secondaryButton} onClick={() => setPreviewAberto(true)}>
-          👁️ Pré-visualizar
-        </button>
-
-        <button style={styles.primaryButton} onClick={exportarPDF} disabled={gerandoPdf}>
-          {gerandoPdf ? "Gerando PDF..." : "📄 Baixar PDF"}
-        </button>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 14,
-          marginTop: 24,
-        }}
-      >
-        <div style={styles.softBox}><strong>Total</strong><br />{dados.total}</div>
-        <div style={styles.softBox}><strong>Abertos</strong><br />{dados.abertos}</div>
-        <div style={styles.softBox}><strong>Fechados</strong><br />{dados.fechados}</div>
-        <div style={styles.softBox}><strong>Críticos</strong><br />{dados.criticos}</div>
-        <div style={styles.softBox}><strong>SLA atendido</strong><br />{dados.sla}%</div>
-      </div>
-
-      <div className="analytics-grid" style={{ marginTop: 24 }}>
-        <div className="analytics-card">
-          <h3>Chamados por prioridade</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={dados.porPrioridade}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={55}
-                outerRadius={90}
-                label
-                paddingAngle={4}
-              >
-                {dados.porPrioridade.map((item, i) => (
-                  <Cell key={i} fill={corPrioridade(item.name)} stroke="#020b16" strokeWidth={2} />
-                ))}
-              </Pie>
-              <TooltipDark />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="analytics-card">
-          <h3>Chamados por estação</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={dados.porLocalidade}>
-              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
-              <XAxis dataKey="name" hide />
-              <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <TooltipDark />
-              <Bar dataKey="value" fill="#1e9bff" radius={[8, 8, 0, 0]}>
-                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="analytics-card">
-          <h3>Chamados por status</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={dados.porStatus}>
-              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
-              <XAxis dataKey="name" hide />
-              <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <TooltipDark />
-              <Bar dataKey="value" fill="#30d158" radius={[8, 8, 0, 0]}>
-                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="analytics-card">
-          <h3>Chamados por equipe</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={dados.porEquipe}>
-              <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
-              <XAxis dataKey="name" hide />
-              <YAxis stroke="#9fb1cc" allowDecimals={false} />
-              <TooltipDark />
-              <Bar dataKey="value" fill="#ff9f1a" radius={[8, 8, 0, 0]}>
-                <LabelList dataKey="value" position="top" fill="#fff" fontWeight={900} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="clock-card">
+          <strong>
+            {agora.toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </strong>
+          <small>{agora.toLocaleDateString("pt-BR")}</small>
         </div>
       </div>
 
-      <div className="pdf-stage-hidden">
-        <RelatorioCompleto />
-      </div>
+      {carregando ? (
+        <div className="panel">Carregando analytics...</div>
+      ) : (
+        <>
+          <div className="kpi-grid">
+            <Kpi
+              icon="📂"
+              label="Chamados abertos"
+              value={dados.abertos}
+              sub="operação ativa"
+              color={azul}
+            />
 
-      {previewAberto && (
-        <div className="preview-overlay">
-          <div className="preview-actions">
-            <button style={styles.secondaryButton} onClick={() => setPreviewAberto(false)}>
-              Fechar
-            </button>
+            <Kpi
+              icon="⚙️"
+              label="Em execução"
+              value={dados.execucao}
+              sub="em atendimento"
+              color={amarelo}
+            />
 
-            <button style={styles.primaryButton} onClick={exportarPDF} disabled={gerandoPdf}>
-              {gerandoPdf ? "Gerando PDF..." : "📄 Baixar PDF"}
-            </button>
+            <Kpi
+              icon="✅"
+              label="Finalizados"
+              value={dados.finalizados}
+              sub="histórico geral"
+              color={verde}
+            />
+
+            <Kpi
+              icon="🎯"
+              label="SLA atendido"
+              value={`${dados.slaAtendido}%`}
+              sub="dados reais"
+              color={roxo}
+            />
+
+            <Kpi
+              icon="🚨"
+              label="Críticos"
+              value={dados.criticos}
+              sub="atenção imediata"
+              color={vermelho}
+            />
           </div>
 
-          <div className="preview-page">
-            <RelatorioCompleto />
+          <div className="dash-grid">
+            <Panel title="Chamados por prioridade">
+              {dados.porPrioridade.length ? (
+                <ResponsiveContainer width="100%" height={210}>
+                  <PieChart>
+                    <Pie
+                      data={dados.porPrioridade}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={52}
+                      outerRadius={84}
+                      paddingAngle={2}
+                    >
+                      {dados.porPrioridade.map((entry, index) => (
+                        <Cell
+                          key={index}
+                          fill={prioridadeCores[entry.name] || azul}
+                          stroke="rgba(2,10,20,.98)"
+                          strokeWidth={2}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="empty">Sem dados</div>
+              )}
+
+              <div className="panel-foot">Últimos registros</div>
+            </Panel>
+
+            <Panel title="Chamados por estação">
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={dados.porEstacao}>
+                  <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#9fb1cc"
+                    tick={{ fill: "#9fb1cc", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    stroke="#9fb1cc"
+                    allowDecimals={false}
+                    tick={{ fill: "#9fb1cc", fontSize: 12 }}
+                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(30,155,255,.08)" }} />
+                  <Bar dataKey="value" fill={azul} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="panel-foot">Últimos 30 dias</div>
+            </Panel>
+
+            <Panel title="Produtividade por equipe">
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={dados.porEquipe}>
+                  <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#9fb1cc"
+                    tick={{ fill: "#9fb1cc", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    stroke="#9fb1cc"
+                    allowDecimals={false}
+                    tick={{ fill: "#9fb1cc", fontSize: 12 }}
+                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(34,197,94,.08)" }} />
+                  <Bar dataKey="value" fill={verde} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="panel-foot">Base: chamados por equipe</div>
+            </Panel>
+
+            <Panel title="Chamados por tipo">
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={dados.porTipo}>
+                  <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#9fb1cc"
+                    tick={{ fill: "#9fb1cc", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    stroke="#9fb1cc"
+                    allowDecimals={false}
+                    tick={{ fill: "#9fb1cc", fontSize: 12 }}
+                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(245,158,11,.08)" }} />
+                  <Bar dataKey="value" fill={laranja} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="panel-foot">Classificação geral</div>
+            </Panel>
           </div>
-        </div>
+
+          <div className="dash-grid-bottom">
+            <Panel title="Chamados recentes">
+              <div className="recent-list">
+                {dados.recentes.length ? (
+                  dados.recentes.map((c, i) => {
+                    const prio = normalizar(c.prioridade, "Média");
+                    const cor = prioridadeCores[prio] || azul;
+
+                    return (
+                      <div className="recent-item" key={c.id || i}>
+                        <div>
+                          <strong>
+                            {c.codigo || c.titulo || `Chamado #${c.id || i + 1}`}
+                          </strong>
+                          <small>
+                            {c.localidade || c.estacao || c.unidade || "-"}
+                          </small>
+                        </div>
+
+                        <span
+                          className="priority-pill"
+                          style={{
+                            color: cor,
+                            background: `${cor}22`,
+                          }}
+                        >
+                          {prio}
+                        </span>
+
+                        <small>{formatarData(c.created_at)}</small>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="empty">Nenhum chamado recente</div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel title="SLA - Acordos de nível de serviço">
+              <div className="sla-wrap">
+                <div className="sla-number">
+                  <div>
+                    <strong>{dados.slaAtendido}%</strong>
+                    <span>SLA atendido</span>
+                  </div>
+                </div>
+
+                <div className="sla-meta">
+                  <div>
+                    <strong>Dentro do prazo</strong>
+                    <br />
+                    <span style={{ color: "#9fb1cc" }}>
+                      {dados.total - dados.criticos} chamados
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>Fora do prazo / críticos</strong>
+                    <br />
+                    <span style={{ color: vermelho }}>
+                      {dados.criticos} chamados
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="panel-foot">Indicador operacional</div>
+            </Panel>
+          </div>
+        </>
       )}
+    </div>
+  );
+}
+
+function Kpi({ icon, label, value, sub, color }) {
+  return (
+    <div
+      className="kpi-card"
+      style={{
+        "--glow": color,
+        "--glow-soft": `${color}33`,
+        "--border": `${color}cc`,
+      }}
+    >
+      <div className="kpi-row">
+        <div
+          className="kpi-icon"
+          style={{
+            "--bg": `${color}22`,
+            "--shadow": `${color}55`,
+          }}
+        >
+          {icon}
+        </div>
+
+        <div>
+          <div className="kpi-label">{label}</div>
+          <div className="kpi-value">{value}</div>
+          <div className="kpi-sub">{sub}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Panel({ title, children }) {
+  return (
+    <div className="panel">
+      <h3>{title}</h3>
+      {children}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 const LOGO_URL = "https://i.imgur.com/aAMds6C.jpeg";
+const STORAGE_KEY = "equipamentos-ebap-storage";
 
 const ebapsBase = [
   "EBAP Aribiri",
@@ -121,7 +122,19 @@ function resumo(lista) {
 }
 
 export default function EquipamentosPage() {
-  const [ebaps, setEbaps] = useState(dadosIniciais);
+ const [ebaps, setEbaps] = useState(() => {
+  try {
+    const salvo = localStorage.getItem(STORAGE_KEY);
+
+    if (salvo) {
+      return JSON.parse(salvo);
+    }
+
+    return dadosIniciais;
+  } catch {
+    return dadosIniciais;
+  }
+});
   const [editando, setEditando] = useState(false);
   const [modal, setModal] = useState(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -145,7 +158,9 @@ export default function EquipamentosPage() {
 
     return { operando, atencao, falha, total };
   }, [ebaps]);
-
+useEffect(() => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ebaps));
+}, [ebaps]);
   async function exportarPDF() {
     setGerandoPdf(true);
     setModal(null);
