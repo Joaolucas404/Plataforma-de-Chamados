@@ -16,6 +16,10 @@ import {
 const LOGO_URL = "https://i.imgur.com/aAMds6C.jpeg";
 const STORAGE_KEY = "equipamentos-ebap-storage";
 
+function pdfText(texto) {
+  return String(texto).replaceAll(" ", "\u00A0");
+}
+
 const ebapsBase = [
   "EBAP Aribiri",
   "EBAP Comportas",
@@ -122,19 +126,16 @@ function resumo(lista) {
 }
 
 export default function EquipamentosPage() {
- const [ebaps, setEbaps] = useState(() => {
-  try {
-    const salvo = localStorage.getItem(STORAGE_KEY);
-
-    if (salvo) {
-      return JSON.parse(salvo);
+  const [ebaps, setEbaps] = useState(() => {
+    try {
+      const salvo = localStorage.getItem(STORAGE_KEY);
+      if (salvo) return JSON.parse(salvo);
+      return dadosIniciais;
+    } catch {
+      return dadosIniciais;
     }
+  });
 
-    return dadosIniciais;
-  } catch {
-    return dadosIniciais;
-  }
-});
   const [editando, setEditando] = useState(false);
   const [modal, setModal] = useState(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -158,25 +159,33 @@ export default function EquipamentosPage() {
 
     return { operando, atencao, falha, total };
   }, [ebaps]);
-useEffect(() => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(ebaps));
-}, [ebaps]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(ebaps));
+  }, [ebaps]);
+
   async function exportarPDF() {
     setGerandoPdf(true);
     setModal(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const paginas = document.querySelectorAll(".pdf-stage-hidden .pdf-page");
       const pdf = new jsPDF("landscape", "mm", "a4");
 
       for (let i = 0; i < paginas.length; i++) {
         const canvas = await html2canvas(paginas[i], {
-          scale: 2,
+          scale: 3,
           useCORS: true,
+          allowTaint: true,
           backgroundColor: "#ffffff",
-          letterRendering: true,
+          letterRendering: false,
+          logging: false,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 1123,
+          windowHeight: 794,
         });
 
         const imgData = canvas.toDataURL("image/png");
@@ -266,11 +275,22 @@ useEffect(() => {
     <>
       <style>{`
         .pdf-stage-hidden {
-          position: absolute;
-          left: -99999px;
+          position: fixed;
+          left: -20000px;
           top: 0;
           width: 1123px;
-          z-index: -1;
+          height: auto;
+          opacity: 1;
+          pointer-events: none;
+          z-index: -10;
+        }
+
+        .pdf-page,
+        .pdf-page * {
+          box-sizing: border-box;
+          font-family: Arial, Helvetica, sans-serif !important;
+          -webkit-font-smoothing: antialiased;
+          text-rendering: geometricPrecision;
         }
 
         .preview-overlay {
@@ -328,23 +348,7 @@ useEffect(() => {
         </div>
 
         <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-          <button
-            onClick={() => setEditando((v) => !v)}
-            style={{
-              background: editando
-                ? "linear-gradient(135deg, #14a44d, #0f7a34)"
-                : "linear-gradient(135deg, #2f7bff, #1658d1)",
-              color: "white",
-              border: "none",
-              borderRadius: 16,
-              padding: "14px 22px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
+          <button onClick={() => setEditando((v) => !v)} style={buttonStyle(editando)}>
             <Save size={18} />
             {editando ? "Salvar quantidades" : "Editar quantidades"}
           </button>
@@ -352,16 +356,8 @@ useEffect(() => {
           <button
             onClick={() => setPreviewAberto(true)}
             style={{
+              ...buttonBase,
               background: "linear-gradient(135deg, #0ea5e9, #0369a1)",
-              color: "white",
-              border: "none",
-              borderRadius: 16,
-              padding: "14px 22px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
             }}
           >
             <Eye size={18} />
@@ -372,16 +368,8 @@ useEffect(() => {
             onClick={exportarPDF}
             disabled={gerandoPdf}
             style={{
+              ...buttonBase,
               background: "linear-gradient(135deg, #ff7a1a, #d85d00)",
-              color: "white",
-              border: "none",
-              borderRadius: 16,
-              padding: "14px 22px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
               opacity: gerandoPdf ? 0.7 : 1,
             }}
           >
@@ -522,6 +510,27 @@ useEffect(() => {
       )}
     </>
   );
+}
+
+const buttonBase = {
+  color: "white",
+  border: "none",
+  borderRadius: 16,
+  padding: "14px 22px",
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+function buttonStyle(editando) {
+  return {
+    ...buttonBase,
+    background: editando
+      ? "linear-gradient(135deg, #14a44d, #0f7a34)"
+      : "linear-gradient(135deg, #2f7bff, #1658d1)",
+  };
 }
 
 function HeaderIcon({ icon, label }) {
@@ -767,13 +776,14 @@ function ReportPage({ children, pageNumber, totalPages }) {
       className="pdf-page"
       style={{
         width: 1123,
-        minHeight: 794,
+        height: 794,
         background: "#ffffff",
         color: "#0f172a",
         padding: 38,
         boxSizing: "border-box",
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "Arial, Helvetica, sans-serif",
         position: "relative",
+        overflow: "hidden",
       }}
     >
       {children}
@@ -785,85 +795,65 @@ function ReportPage({ children, pageNumber, totalPages }) {
           right: 38,
           color: "#64748b",
           fontSize: 13,
+          whiteSpace: "nowrap",
         }}
       >
-        Página {pageNumber} de {totalPages}
+        {pdfText(`Página ${pageNumber} de ${totalPages}`)}
       </div>
     </div>
   );
 }
 
-function TextoLinha({ children, style = {} }) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, ...style }}>
-      {children}
-    </div>
-  );
-}
-
 function RelatorioCompleto({ ebaps, totais }) {
-  const totalPaginas = 2;
+  const ebapsPorPagina = 7;
+  const paginasTabela = [];
+
+  for (let i = 0; i < ebaps.length; i += ebapsPorPagina) {
+    paginasTabela.push(ebaps.slice(i, i + ebapsPorPagina));
+  }
+
+  const totalPaginas = 1 + paginasTabela.length;
 
   return (
     <>
       <ReportPage pageNumber={1} totalPages={totalPaginas}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <img
             src={LOGO_URL}
             alt="Logo"
-            style={{ width: 160, background: "white", borderRadius: 8 }}
+            crossOrigin="anonymous"
+            style={{ width: 160, background: "white", borderRadius: 8, display: "block" }}
           />
 
           <div style={{ textAlign: "right" }}>
-            <TextoLinha style={{ justifyContent: "flex-end", fontSize: 22, fontWeight: 900, color: "#0f2f5f" }}>
-              <span>RELATÓRIO</span>
-              <span>OPERACIONAL</span>
-            </TextoLinha>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f", whiteSpace: "nowrap" }}>
+              {pdfText("RELATÓRIO OPERACIONAL")}
+            </div>
 
-            <TextoLinha style={{ justifyContent: "flex-end", color: "#64748b", marginTop: 4 }}>
-              <span>Status</span>
-              <span>de</span>
-              <span>Equipamentos</span>
-              <span>por</span>
-              <span>EBAP</span>
-            </TextoLinha>
+            <div style={{ color: "#64748b", marginTop: 6, whiteSpace: "nowrap", fontSize: 16 }}>
+              {pdfText("Status de Equipamentos por EBAP")}
+            </div>
           </div>
         </div>
 
         <div style={{ marginTop: 60 }}>
-          <TextoLinha style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
-            <span>RELATÓRIO</span>
-            <span>DE</span>
-          </TextoLinha>
-
           <div style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
-            EQUIPAMENTOS
+            {pdfText("RELATÓRIO DE")}
           </div>
 
-          <div
-            style={{
-              marginTop: 22,
-              width: 120,
-              height: 5,
-              background: "#1e9bff",
-            }}
-          />
+          <div style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
+            {pdfText("EQUIPAMENTOS")}
+          </div>
 
-          <TextoLinha style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
-            <span>Bombas,</span>
-            <span>rastelos</span>
-            <span>e</span>
-            <span>comportas</span>
-            <span>por</span>
-            <span>unidade</span>
-            <span>operacional.</span>
-          </TextoLinha>
+          <div style={{ marginTop: 22, width: 120, height: 5, background: "#1e9bff" }} />
 
-          <TextoLinha style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
-            <span>Gerado</span>
-            <span>em</span>
-            <span>{new Date().toLocaleString("pt-BR")}</span>
-          </TextoLinha>
+          <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
+            {pdfText("Bombas, rastelos e comportas por unidade operacional.")}
+          </div>
+
+          <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
+            {pdfText(`Gerado em ${new Date().toLocaleString("pt-BR")}`)}
+          </div>
         </div>
 
         <div
@@ -885,48 +875,50 @@ function RelatorioCompleto({ ebaps, totais }) {
         </div>
       </ReportPage>
 
-      <ReportPage pageNumber={2} totalPages={totalPaginas}>
-        <TextoLinha style={{ color: "#0f2f5f", margin: 0, fontSize: 30, fontWeight: 900 }}>
-          <span>Resumo</span>
-          <span>por</span>
-          <span>EBAP</span>
-        </TextoLinha>
+      {paginasTabela.map((grupo, index) => (
+        <ReportPage key={index} pageNumber={index + 2} totalPages={totalPaginas}>
+          <div style={{ color: "#0f2f5f", margin: 0, fontSize: 30, fontWeight: 900 }}>
+            {pdfText("Resumo por EBAP")}
+          </div>
 
-        <table
-          style={{
-            marginTop: 24,
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 14,
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#0f2f5f", color: "white" }}>
-              <th style={th}>EBAP</th>
-              <th style={th}>Bombas</th>
-              <th style={th}>Rastelos</th>
-              <th style={th}>Comportas</th>
-              <th style={th}>Observações</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {ebaps.map((ebap) => (
-              <tr key={ebap.id}>
-                <td style={td}>
-                  <strong>{ebap.nome}</strong>
-                  <br />
-                  <span style={{ color: "#64748b", fontSize: 12 }}>{ebap.id}</span>
-                </td>
-                <td style={td}>{renderPdfResumo(ebap.bombas)}</td>
-                <td style={td}>{renderPdfResumo(ebap.rastelos)}</td>
-                <td style={td}>{renderPdfResumo(ebap.comportas)}</td>
-                <td style={td}>{renderObservacoes(ebap)}</td>
+          <table
+            style={{
+              marginTop: 24,
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 13,
+              tableLayout: "fixed",
+            }}
+          >
+            <thead>
+              <tr style={{ background: "#0f2f5f", color: "white" }}>
+                <th style={{ ...th, width: "20%" }}>{pdfText("EBAP")}</th>
+                <th style={{ ...th, width: "19%" }}>{pdfText("Bombas")}</th>
+                <th style={{ ...th, width: "19%" }}>{pdfText("Rastelos")}</th>
+                <th style={{ ...th, width: "19%" }}>{pdfText("Comportas")}</th>
+                <th style={{ ...th, width: "23%" }}>{pdfText("Observações")}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </ReportPage>
+            </thead>
+
+            <tbody>
+              {grupo.map((ebap) => (
+                <tr key={ebap.id}>
+                  <td style={td}>
+                    <strong>{pdfText(ebap.nome)}</strong>
+                    <br />
+                    <span style={{ color: "#64748b", fontSize: 11 }}>{pdfText(ebap.id)}</span>
+                  </td>
+
+                  <td style={td}>{renderPdfResumo(ebap.bombas)}</td>
+                  <td style={td}>{renderPdfResumo(ebap.rastelos)}</td>
+                  <td style={td}>{renderPdfResumo(ebap.comportas)}</td>
+                  <td style={td}>{renderObservacoes(ebap)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ReportPage>
+      ))}
     </>
   );
 }
@@ -940,11 +932,20 @@ function PdfKpi({ titulo, valor, detalhe, cor }) {
         borderRadius: 16,
         padding: 16,
         color: "#0f172a",
+        minHeight: 110,
       }}
     >
-      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>{titulo}</div>
-      <div style={{ fontSize: 32, fontWeight: 950, color: cor }}>{valor}</div>
-      <div style={{ fontSize: 12, color: "#64748b" }}>{detalhe}</div>
+      <div style={{ fontSize: 12, fontWeight: 900, color: "#475569", whiteSpace: "nowrap" }}>
+        {pdfText(titulo)}
+      </div>
+
+      <div style={{ fontSize: 32, fontWeight: 950, color: cor, lineHeight: 1.1 }}>
+        {valor}
+      </div>
+
+      <div style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>
+        {pdfText(detalhe)}
+      </div>
     </div>
   );
 }
@@ -956,19 +957,17 @@ function renderPdfResumo(lista) {
 
   return (
     <div>
-      <strong>
+      <strong style={{ fontSize: 12 }}>
         {r.operando}/{r.total}
       </strong>
 
-      <div style={{ color, fontWeight: 800 }}>{status}</div>
+      <div style={{ color, fontWeight: 800, fontSize: 13 }}>
+        {pdfText(status)}
+      </div>
 
-      <TextoLinha style={{ color: "#64748b", fontSize: 12 }}>
-        <span>{r.operando} op.</span>
-        <span>|</span>
-        <span>{r.atencao} atenção</span>
-        <span>|</span>
-        <span>{r.falha} falha</span>
-      </TextoLinha>
+      <div style={{ color: "#64748b", fontSize: 10, whiteSpace: "nowrap" }}>
+        {pdfText(`${r.operando} op. | ${r.atencao} atenção | ${r.falha} falha`)}
+      </div>
     </div>
   );
 }
@@ -979,16 +978,16 @@ function renderObservacoes(ebap) {
 
   if (!obs.length) {
     return (
-      <TextoLinha style={{ color: "#15803d", fontWeight: 800 }}>
-        <span>Sem</span>
-        <span>ocorrências</span>
-      </TextoLinha>
+      <div style={{ color: "#15803d", fontWeight: 800, whiteSpace: "nowrap" }}>
+        {pdfText("Sem ocorrências")}
+      </div>
     );
   }
 
   return obs.map((o) => (
     <div key={o.id} style={{ marginBottom: 4 }}>
-      <strong>{o.nome}:</strong> {o.observacao}
+      <strong>{pdfText(o.nome)}:</strong>{" "}
+      {pdfText(o.observacao)}
     </div>
   ));
 }
@@ -997,10 +996,13 @@ const th = {
   padding: 12,
   textAlign: "left",
   fontWeight: 800,
+  whiteSpace: "nowrap",
 };
 
 const td = {
-  padding: 12,
+  padding: "9px 12px",
   borderBottom: "1px solid #dbe3ef",
   verticalAlign: "top",
+  wordBreak: "normal",
+  lineHeight: 1.15,
 };
