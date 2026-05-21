@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -12,6 +12,8 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { supabase } from "../App";
 
 const azul = "#1e9bff";
@@ -41,7 +43,6 @@ function formatarData(data) {
 
 function agrupar(lista, campo, limite = 8) {
   const mapa = {};
-
   lista.forEach((item) => {
     const chave = normalizar(item[campo]);
     mapa[chave] = (mapa[chave] || 0) + 1;
@@ -102,8 +103,11 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function AnalyticsPage({ styles, colors }) {
+  const reportRef = useRef(null);
+
   const [chamados, setChamados] = useState([]);
   const [carregando, setCarregando] = useState(true);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
   const [agora, setAgora] = useState(new Date());
 
   useEffect(() => {
@@ -136,6 +140,54 @@ export default function AnalyticsPage({ styles, colors }) {
     setCarregando(false);
   }
 
+  async function exportarPDF() {
+    if (!reportRef.current) return;
+
+    setGerandoPdf(true);
+
+    try {
+      const elemento = reportRef.current;
+
+      const canvas = await html2canvas(elemento, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#020b16",
+        windowWidth: elemento.scrollWidth,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const dataAtual = new Date().toLocaleDateString("pt-BR").replaceAll("/", "-");
+      pdf.save(`relatorio-analytics-chamados-${dataAtual}.pdf`);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      alert("Erro ao gerar PDF. Tente novamente.");
+    } finally {
+      setGerandoPdf(false);
+    }
+  }
+
   const dados = useMemo(() => {
     const total = chamados.length;
 
@@ -161,27 +213,7 @@ export default function AnalyticsPage({ styles, colors }) {
       String(c.prioridade || "").toLowerCase().includes("cr")
     ).length;
 
-    const slaAtendido =
-      total > 0 ? Math.round(((total - criticos) / total) * 100) : 0;
-
-    const porPrioridade = agrupar(chamados, "prioridade");
-    const porEstacao = agruparMultiCampo(chamados, [
-      "localidade",
-      "estacao",
-      "unidade",
-    ]);
-    const porEquipe = agruparMultiCampo(chamados, [
-      "tecnico",
-      "equipe",
-      "responsavel",
-    ]);
-    const porTipo = agruparMultiCampo(chamados, [
-      "tipo_falha",
-      "tipo",
-      "categoria",
-    ]);
-
-    const recentes = chamados.slice(0, 6);
+    const slaAtendido = total > 0 ? Math.round(((total - criticos) / total) * 100) : 0;
 
     return {
       total,
@@ -190,11 +222,11 @@ export default function AnalyticsPage({ styles, colors }) {
       finalizados,
       criticos,
       slaAtendido,
-      porPrioridade,
-      porEstacao,
-      porEquipe,
-      porTipo,
-      recentes,
+      porPrioridade: agrupar(chamados, "prioridade"),
+      porEstacao: agruparMultiCampo(chamados, ["localidade", "estacao", "unidade"]),
+      porEquipe: agruparMultiCampo(chamados, ["tecnico", "equipe", "responsavel"]),
+      porTipo: agruparMultiCampo(chamados, ["tipo_falha", "tipo", "categoria"]),
+      recentes: chamados.slice(0, 6),
     };
   }, [chamados]);
 
@@ -207,6 +239,35 @@ export default function AnalyticsPage({ styles, colors }) {
           overflow-x: hidden;
         }
 
+        .analytics-actions {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 14px;
+        }
+
+        .pdf-button {
+          border: 1px solid rgba(30,155,255,.65);
+          background: linear-gradient(135deg, #1e9bff, #1658d1);
+          color: white;
+          border-radius: 16px;
+          min-height: 48px;
+          padding: 0 20px;
+          font-weight: 950;
+          cursor: pointer;
+          box-shadow: 0 16px 35px rgba(30,155,255,.22);
+        }
+
+        .pdf-button:disabled {
+          opacity: .65;
+          cursor: not-allowed;
+        }
+
+        .report-area {
+          background: #020b16;
+          border-radius: 18px;
+          padding: 4px;
+        }
+
         .analytics-header {
           display: flex;
           align-items: center;
@@ -217,10 +278,11 @@ export default function AnalyticsPage({ styles, colors }) {
 
         .analytics-title h1 {
           margin: 0;
-          font-size: 36px;
+          font-size: clamp(24px, 3vw, 36px);
           font-weight: 950;
           letter-spacing: .03em;
           text-transform: uppercase;
+          line-height: 1.12;
         }
 
         .analytics-title span {
@@ -240,18 +302,13 @@ export default function AnalyticsPage({ styles, colors }) {
             radial-gradient(circle at top right, rgba(30,155,255,.18), transparent 42%),
             linear-gradient(180deg, rgba(8,29,54,.98), rgba(2,10,22,.98));
           text-align: center;
-          box-shadow:
-            0 0 28px rgba(30,155,255,.18),
-            inset 0 0 22px rgba(255,255,255,.03);
         }
 
         .clock-card strong {
           display: block;
           font-size: 24px;
           font-weight: 950;
-          letter-spacing: .05em;
           color: white;
-          text-shadow: 0 0 12px rgba(255,255,255,.18);
         }
 
         .clock-card small {
@@ -272,44 +329,28 @@ export default function AnalyticsPage({ styles, colors }) {
           position: relative;
           min-height: 96px;
           padding: 18px;
-          border-radius: 12px;
+          border-radius: 16px;
           overflow: hidden;
           border: 1px solid var(--border);
           background:
             radial-gradient(circle at right bottom, var(--glow-soft), transparent 38%),
             linear-gradient(180deg, rgba(5,22,40,.96), rgba(2,10,20,.98));
-          box-shadow: 0 16px 45px rgba(0,0,0,.25);
-        }
-
-        .kpi-card::after {
-          content: "";
-          position: absolute;
-          width: 120px;
-          height: 120px;
-          border-radius: 50%;
-          right: -44px;
-          bottom: -44px;
-          background: var(--glow);
-          opacity: .14;
         }
 
         .kpi-row {
           display: flex;
           align-items: center;
           gap: 14px;
-          position: relative;
-          z-index: 1;
         }
 
         .kpi-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
           display: grid;
           place-items: center;
-          font-size: 24px;
+          font-size: 23px;
           background: var(--bg);
-          box-shadow: 0 0 22px var(--shadow);
         }
 
         .kpi-label {
@@ -317,7 +358,6 @@ export default function AnalyticsPage({ styles, colors }) {
           text-transform: uppercase;
           font-size: 12px;
           font-weight: 950;
-          letter-spacing: .05em;
         }
 
         .kpi-value {
@@ -337,7 +377,7 @@ export default function AnalyticsPage({ styles, colors }) {
 
         .dash-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr 1fr;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 14px;
           margin-bottom: 14px;
         }
@@ -349,14 +389,13 @@ export default function AnalyticsPage({ styles, colors }) {
         }
 
         .panel {
-          border-radius: 12px;
+          border-radius: 16px;
           border: 1px solid rgba(30,155,255,.55);
           background:
             radial-gradient(circle at top right, rgba(30,155,255,.10), transparent 36%),
             linear-gradient(180deg, rgba(5,22,40,.96), rgba(1,8,18,.98));
           padding: 18px;
           min-height: 260px;
-          box-shadow: 0 16px 45px rgba(0,0,0,.22);
           overflow: hidden;
         }
 
@@ -365,7 +404,6 @@ export default function AnalyticsPage({ styles, colors }) {
           font-size: 15px;
           font-weight: 950;
           text-transform: uppercase;
-          letter-spacing: .03em;
           color: #f2f7ff;
         }
 
@@ -424,7 +462,6 @@ export default function AnalyticsPage({ styles, colors }) {
           background:
             radial-gradient(circle, #09213d 55%, transparent 56%),
             conic-gradient(#1e9bff ${dados.slaAtendido}%, rgba(255,255,255,.08) 0);
-          box-shadow: 0 0 30px rgba(30,155,255,.25);
         }
 
         .sla-number strong {
@@ -459,27 +496,6 @@ export default function AnalyticsPage({ styles, colors }) {
           text-align: center;
         }
 
-        .recharts-wrapper,
-        .recharts-surface {
-          background: transparent !important;
-        }
-
-        .recharts-default-tooltip {
-          background: #061a2f !important;
-          border: 1px solid rgba(30,155,255,.65) !important;
-          border-radius: 12px !important;
-          color: #eaf3ff !important;
-          box-shadow: 0 12px 35px rgba(0,0,0,.45) !important;
-        }
-
-        .recharts-tooltip-label {
-          color: #9fb1cc !important;
-        }
-
-        .recharts-legend-item-text {
-          color: #cfe2ff !important;
-        }
-
         @media (max-width: 1300px) {
           .kpi-grid {
             grid-template-columns: repeat(2, 1fr);
@@ -495,254 +511,191 @@ export default function AnalyticsPage({ styles, colors }) {
             align-items: flex-start;
           }
         }
+
+        @media (max-width: 600px) {
+          .analytics-actions {
+            justify-content: stretch;
+          }
+
+          .pdf-button {
+            width: 100%;
+          }
+
+          .kpi-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .recent-item {
+            grid-template-columns: 1fr;
+          }
+
+          .sla-wrap {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-title span {
+            letter-spacing: .12em;
+            font-size: 11px;
+          }
+        }
       `}</style>
 
-      <div className="analytics-header">
-        <div className="analytics-title">
-          <h1>PAINEL GERENCIAL — GESTÃO DE CHAMADOS</h1>
-          <span>Visão geral da operação em tempo real</span>
-        </div>
-
-        <div className="clock-card">
-          <strong>
-            {agora.toLocaleTimeString("pt-BR", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
-          </strong>
-          <small>{agora.toLocaleDateString("pt-BR")}</small>
-        </div>
+      <div className="analytics-actions">
+        <button
+          type="button"
+          className="pdf-button"
+          onClick={exportarPDF}
+          disabled={gerandoPdf || carregando}
+        >
+          {gerandoPdf ? "Gerando PDF..." : "📄 Exportar PDF"}
+        </button>
       </div>
 
-      {carregando ? (
-        <div className="panel">Carregando analytics...</div>
-      ) : (
-        <>
-          <div className="kpi-grid">
-            <Kpi
-              icon="📂"
-              label="Chamados abertos"
-              value={dados.abertos}
-              sub="operação ativa"
-              color={azul}
-            />
-
-            <Kpi
-              icon="⚙️"
-              label="Em execução"
-              value={dados.execucao}
-              sub="em atendimento"
-              color={amarelo}
-            />
-
-            <Kpi
-              icon="✅"
-              label="Finalizados"
-              value={dados.finalizados}
-              sub="histórico geral"
-              color={verde}
-            />
-
-            <Kpi
-              icon="🎯"
-              label="SLA atendido"
-              value={`${dados.slaAtendido}%`}
-              sub="dados reais"
-              color={roxo}
-            />
-
-            <Kpi
-              icon="🚨"
-              label="Críticos"
-              value={dados.criticos}
-              sub="atenção imediata"
-              color={vermelho}
-            />
+      <div ref={reportRef} className="report-area">
+        <div className="analytics-header">
+          <div className="analytics-title">
+            <h1>PAINEL GERENCIAL — GESTÃO DE CHAMADOS</h1>
+            <span>Visão geral da operação em tempo real</span>
           </div>
 
-          <div className="dash-grid">
-            <Panel title="Chamados por prioridade">
-              {dados.porPrioridade.length ? (
-                <ResponsiveContainer width="100%" height={210}>
-                  <PieChart>
-                    <Pie
-                      data={dados.porPrioridade}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={52}
-                      outerRadius={84}
-                      paddingAngle={2}
-                    >
-                      {dados.porPrioridade.map((entry, index) => (
-                        <Cell
-                          key={index}
-                          fill={prioridadeCores[entry.name] || azul}
-                          stroke="rgba(2,10,20,.98)"
-                          strokeWidth={2}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="empty">Sem dados</div>
-              )}
-
-              <div className="panel-foot">Últimos registros</div>
-            </Panel>
-
-            <Panel title="Chamados por estação">
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={dados.porEstacao}>
-                  <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#9fb1cc"
-                    tick={{ fill: "#9fb1cc", fontSize: 11 }}
-                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    stroke="#9fb1cc"
-                    allowDecimals={false}
-                    tick={{ fill: "#9fb1cc", fontSize: 12 }}
-                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
-                    tickLine={false}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(30,155,255,.08)" }} />
-                  <Bar dataKey="value" fill={azul} radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="panel-foot">Últimos 30 dias</div>
-            </Panel>
-
-            <Panel title="Produtividade por equipe">
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={dados.porEquipe}>
-                  <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#9fb1cc"
-                    tick={{ fill: "#9fb1cc", fontSize: 11 }}
-                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    stroke="#9fb1cc"
-                    allowDecimals={false}
-                    tick={{ fill: "#9fb1cc", fontSize: 12 }}
-                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
-                    tickLine={false}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(34,197,94,.08)" }} />
-                  <Bar dataKey="value" fill={verde} radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="panel-foot">Base: chamados por equipe</div>
-            </Panel>
-
-            <Panel title="Chamados por tipo">
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={dados.porTipo}>
-                  <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#9fb1cc"
-                    tick={{ fill: "#9fb1cc", fontSize: 11 }}
-                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    stroke="#9fb1cc"
-                    allowDecimals={false}
-                    tick={{ fill: "#9fb1cc", fontSize: 12 }}
-                    axisLine={{ stroke: "rgba(159,177,204,.6)" }}
-                    tickLine={false}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(245,158,11,.08)" }} />
-                  <Bar dataKey="value" fill={laranja} radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="panel-foot">Classificação geral</div>
-            </Panel>
+          <div className="clock-card">
+            <strong>
+              {agora.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+            </strong>
+            <small>{agora.toLocaleDateString("pt-BR")}</small>
           </div>
+        </div>
 
-          <div className="dash-grid-bottom">
-            <Panel title="Chamados recentes">
-              <div className="recent-list">
-                {dados.recentes.length ? (
-                  dados.recentes.map((c, i) => {
-                    const prio = normalizar(c.prioridade, "Média");
-                    const cor = prioridadeCores[prio] || azul;
+        {carregando ? (
+          <div className="panel">Carregando analytics...</div>
+        ) : (
+          <>
+            <div className="kpi-grid">
+              <Kpi icon="📂" label="Chamados abertos" value={dados.abertos} sub="operação ativa" color={azul} />
+              <Kpi icon="⚙️" label="Em execução" value={dados.execucao} sub="em atendimento" color={amarelo} />
+              <Kpi icon="✅" label="Finalizados" value={dados.finalizados} sub="histórico geral" color={verde} />
+              <Kpi icon="🎯" label="SLA atendido" value={`${dados.slaAtendido}%`} sub="dados reais" color={roxo} />
+              <Kpi icon="🚨" label="Críticos" value={dados.criticos} sub="atenção imediata" color={vermelho} />
+            </div>
 
-                    return (
-                      <div className="recent-item" key={c.id || i}>
-                        <div>
-                          <strong>
-                            {c.codigo || c.titulo || `Chamado #${c.id || i + 1}`}
-                          </strong>
-                          <small>
-                            {c.localidade || c.estacao || c.unidade || "-"}
-                          </small>
-                        </div>
-
-                        <span
-                          className="priority-pill"
-                          style={{
-                            color: cor,
-                            background: `${cor}22`,
-                          }}
-                        >
-                          {prio}
-                        </span>
-
-                        <small>{formatarData(c.created_at)}</small>
-                      </div>
-                    );
-                  })
+            <div className="dash-grid">
+              <Panel title="Chamados por prioridade">
+                {dados.porPrioridade.length ? (
+                  <ResponsiveContainer width="100%" height={210}>
+                    <PieChart>
+                      <Pie data={dados.porPrioridade} dataKey="value" nameKey="name" innerRadius={52} outerRadius={84} paddingAngle={2}>
+                        {dados.porPrioridade.map((entry, index) => (
+                          <Cell key={index} fill={prioridadeCores[entry.name] || azul} stroke="rgba(2,10,20,.98)" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
                 ) : (
-                  <div className="empty">Nenhum chamado recente</div>
+                  <div className="empty">Sem dados</div>
                 )}
-              </div>
-            </Panel>
+                <div className="panel-foot">Últimos registros</div>
+              </Panel>
 
-            <Panel title="SLA - Acordos de nível de serviço">
-              <div className="sla-wrap">
-                <div className="sla-number">
-                  <div>
-                    <strong>{dados.slaAtendido}%</strong>
-                    <span>SLA atendido</span>
+              <ChartPanel title="Chamados por estação" data={dados.porEstacao} color={azul} />
+              <ChartPanel title="Produtividade por equipe" data={dados.porEquipe} color={verde} />
+              <ChartPanel title="Chamados por tipo" data={dados.porTipo} color={laranja} />
+            </div>
+
+            <div className="dash-grid-bottom">
+              <Panel title="Chamados recentes">
+                <div className="recent-list">
+                  {dados.recentes.length ? (
+                    dados.recentes.map((c, i) => {
+                      const prio = normalizar(c.prioridade, "Média");
+                      const cor = prioridadeCores[prio] || azul;
+
+                      return (
+                        <div className="recent-item" key={c.id || i}>
+                          <div>
+                            <strong>{c.codigo || c.titulo || `Chamado #${c.id || i + 1}`}</strong>
+                            <small>{c.localidade || c.estacao || c.unidade || "-"}</small>
+                          </div>
+
+                          <span className="priority-pill" style={{ color: cor, background: `${cor}22` }}>
+                            {prio}
+                          </span>
+
+                          <small>{formatarData(c.created_at)}</small>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="empty">Nenhum chamado recente</div>
+                  )}
+                </div>
+              </Panel>
+
+              <Panel title="SLA - Acordos de nível de serviço">
+                <div className="sla-wrap">
+                  <div className="sla-number">
+                    <div>
+                      <strong>{dados.slaAtendido}%</strong>
+                      <span>SLA atendido</span>
+                    </div>
+                  </div>
+
+                  <div className="sla-meta">
+                    <div>
+                      <strong>Dentro do prazo</strong>
+                      <br />
+                      <span style={{ color: "#9fb1cc" }}>{dados.total - dados.criticos} chamados</span>
+                    </div>
+
+                    <div>
+                      <strong>Fora do prazo / críticos</strong>
+                      <br />
+                      <span style={{ color: vermelho }}>{dados.criticos} chamados</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="sla-meta">
-                  <div>
-                    <strong>Dentro do prazo</strong>
-                    <br />
-                    <span style={{ color: "#9fb1cc" }}>
-                      {dados.total - dados.criticos} chamados
-                    </span>
-                  </div>
-
-                  <div>
-                    <strong>Fora do prazo / críticos</strong>
-                    <br />
-                    <span style={{ color: vermelho }}>
-                      {dados.criticos} chamados
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="panel-foot">Indicador operacional</div>
-            </Panel>
-          </div>
-        </>
-      )}
+                <div className="panel-foot">Indicador operacional</div>
+              </Panel>
+            </div>
+          </>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ChartPanel({ title, data, color }) {
+  return (
+    <Panel title={title}>
+      <ResponsiveContainer width="100%" height={210}>
+        <BarChart data={data}>
+          <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
+          <XAxis
+            dataKey="name"
+            stroke="#9fb1cc"
+            tick={{ fill: "#9fb1cc", fontSize: 11 }}
+            axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+            tickLine={false}
+          />
+          <YAxis
+            stroke="#9fb1cc"
+            allowDecimals={false}
+            tick={{ fill: "#9fb1cc", fontSize: 12 }}
+            axisLine={{ stroke: "rgba(159,177,204,.6)" }}
+            tickLine={false}
+          />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: `${color}14` }} />
+          <Bar dataKey="value" fill={color} radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="panel-foot">Base: chamados registrados</div>
+    </Panel>
   );
 }
 
@@ -757,13 +710,7 @@ function Kpi({ icon, label, value, sub, color }) {
       }}
     >
       <div className="kpi-row">
-        <div
-          className="kpi-icon"
-          style={{
-            "--bg": `${color}22`,
-            "--shadow": `${color}55`,
-          }}
-        >
+        <div className="kpi-icon" style={{ "--bg": `${color}22` }}>
           {icon}
         </div>
 

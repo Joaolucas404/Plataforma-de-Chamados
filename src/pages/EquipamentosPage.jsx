@@ -1,172 +1,191 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import {
-  Activity,
-  AlertTriangle,
-  Building2,
-  Eye,
-  FileDown,
-  Gauge,
-  Save,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from "recharts";
+import { Eye, FileDown, X } from "lucide-react";
+import { supabase } from "../App";
 
 const LOGO_URL = "https://i.imgur.com/aAMds6C.jpeg";
-const STORAGE_KEY = "equipamentos-ebap-storage";
 
-function pdfText(texto) {
-  return String(texto).replaceAll(" ", "\u00A0");
-}
+const azul = "#1e9bff";
+const verde = "#22c55e";
+const laranja = "#f59e0b";
+const vermelho = "#ef4444";
+const roxo = "#8b5cf6";
+const amarelo = "#facc15";
 
-const ebapsBase = [
-  "EBAP Aribiri",
-  "EBAP Comportas",
-  "EBAP Foz da Costa",
-  "EBAP Cobilândia",
-  "EBAP Laranja",
-  "EBAP Marinho",
-  "EBAP Sitio de Batalha",
-  "EBAP Bigossi",
-  "EBAP Canal da Costa",
-  "EBAP Marilândia",
-  "EBAP Guaranhus",
-];
-
-const statusConfig = {
-  operando: {
-    label: "Operando",
-    color: "#38e66b",
-    bg: "rgba(56,230,107,.12)",
-    border: "rgba(56,230,107,.45)",
-  },
-  atencao: {
-    label: "Atenção",
-    color: "#ffc83d",
-    bg: "rgba(255,200,61,.12)",
-    border: "rgba(255,200,61,.45)",
-  },
-  falha: {
-    label: "Falha",
-    color: "#ff5148",
-    bg: "rgba(255,81,72,.12)",
-    border: "rgba(255,81,72,.45)",
-  },
+const prioridadeCores = {
+  Crítica: vermelho,
+  Critica: vermelho,
+  Alta: laranja,
+  Média: amarelo,
+  Media: amarelo,
+  Baixa: verde,
 };
 
-function PumpIcon({ size = 58 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <path d="M32 10H48L52 18V30H28V18L32 10Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M30 30H50L56 42V58H24V42L30 30Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M22 58H58V68H22V58Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M28 68H52" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M36 10V5H44V10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M28 44H18C14 44 11 47 11 51V58" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M52 44H62C66 44 69 47 69 51V58" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  );
+function pdfText(texto) {
+  return String(texto || "").replaceAll(" ", "\u00A0");
 }
 
-function GateIcon({ size = 58 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <path d="M16 24H64" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M20 24V66H60V24" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
-      <path d="M28 32V62M40 32V62M52 32V62" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M24 62H56" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M26 16H54" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M34 8V16M46 8V16" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M24 62L56 24M56 62L24 24" stroke="currentColor" strokeWidth="3" opacity=".65" />
-    </svg>
-  );
+function normalizar(v, padrao = "Não informado") {
+  return String(v || padrao).trim();
 }
 
-function RakeIcon({ size = 58 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <path d="M18 18H62" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M20 18V62M28 18V62M36 18V62M44 18V62M52 18V62M60 18V62" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M14 62H66" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M16 68H64" stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity=".65" />
-      <path d="M22 62L18 70M30 62L26 70M38 62L34 70M46 62L42 70M54 62L50 70M62 62L58 70" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
+function formatarData(data) {
+  if (!data) return "-";
+  return new Date(data).toLocaleDateString("pt-BR");
 }
 
-function criarEquipamentos(tipo, total, prefixo) {
-  return Array.from({ length: total }, (_, i) => ({
-    id: `${tipo}-${i + 1}`,
-    nome: `${prefixo} ${String(i + 1).padStart(2, "0")}`,
-    status: "operando",
-    observacao: "",
-  }));
-}
+function agrupar(lista, campo, limite = 8) {
+  const mapa = {};
 
-const dadosIniciais = ebapsBase.map((nome, index) => ({
-  nome,
-  id: `EBAP-${String(index + 1).padStart(3, "0")}`,
-  bombas: criarEquipamentos("bomba", nome === "EBAP Foz da Costa" ? 8 : 2, "Bomba"),
-  rastelos: criarEquipamentos("rastelo", 1, "Rastelo"),
-  comportas: criarEquipamentos("comporta", 3, "Comporta"),
-}));
-
-function resumo(lista) {
-  const total = lista.length;
-  const operando = lista.filter((e) => e.status === "operando").length;
-  const atencao = lista.filter((e) => e.status === "atencao").length;
-  const falha = lista.filter((e) => e.status === "falha").length;
-
-  let status = "operando";
-  if (falha > 0) status = "falha";
-  else if (atencao > 0) status = "atencao";
-
-  return { total, operando, atencao, falha, status };
-}
-
-export default function EquipamentosPage() {
-  const [ebaps, setEbaps] = useState(() => {
-    try {
-      const salvo = localStorage.getItem(STORAGE_KEY);
-      if (salvo) return JSON.parse(salvo);
-      return dadosIniciais;
-    } catch {
-      return dadosIniciais;
-    }
+  lista.forEach((item) => {
+    const chave = normalizar(item[campo]);
+    mapa[chave] = (mapa[chave] || 0) + 1;
   });
 
-  const [editando, setEditando] = useState(false);
-  const [modal, setModal] = useState(null);
+  return Object.entries(mapa)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limite);
+}
+
+function agruparMultiCampo(lista, campos, limite = 8) {
+  const mapa = {};
+
+  lista.forEach((item) => {
+    let chave = "Não informado";
+
+    for (const campo of campos) {
+      if (item[campo]) {
+        chave = normalizar(item[campo]);
+        break;
+      }
+    }
+
+    mapa[chave] = (mapa[chave] || 0) + 1;
+  });
+
+  return Object.entries(mapa)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limite);
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div
+      style={{
+        background: "#061a2f",
+        border: "1px solid rgba(30,155,255,.65)",
+        borderRadius: 12,
+        padding: "10px 12px",
+        color: "#eaf3ff",
+        boxShadow: "0 12px 35px rgba(0,0,0,.45)",
+        fontSize: 12,
+        fontWeight: 800,
+      }}
+    >
+      <div style={{ color: "#9fb1cc", marginBottom: 4 }}>
+        {label || payload[0]?.name}
+      </div>
+      <div style={{ color: payload[0]?.color || azul }}>
+        valor: {payload[0]?.value}
+      </div>
+    </div>
+  );
+}
+
+export default function AnalyticsPage() {
+  const [chamados, setChamados] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [agora, setAgora] = useState(new Date());
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [previewAberto, setPreviewAberto] = useState(false);
 
-  const totais = useMemo(() => {
-    let operando = 0;
-    let atencao = 0;
-    let falha = 0;
-    let total = 0;
-
-    ebaps.forEach((ebap) => {
-      ["bombas", "rastelos", "comportas"].forEach((tipo) => {
-        const r = resumo(ebap[tipo]);
-        operando += r.operando;
-        atencao += r.atencao;
-        falha += r.falha;
-        total += r.total;
-      });
-    });
-
-    return { operando, atencao, falha, total };
-  }, [ebaps]);
+  useEffect(() => {
+    carregar();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ebaps));
-  }, [ebaps]);
+    const timer = setInterval(() => setAgora(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  async function carregar() {
+    setCarregando(true);
+
+    const { data, error } = await supabase
+      .from("chamados")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      setChamados([]);
+    } else {
+      setChamados(data || []);
+    }
+
+    setCarregando(false);
+  }
+
+  const dados = useMemo(() => {
+    const total = chamados.length;
+
+    const abertos = chamados.filter((c) =>
+      ["aberto", "aberta", "pendente"].includes(String(c.status || "").toLowerCase())
+    ).length;
+
+    const execucao = chamados.filter((c) =>
+      ["em execução", "em execucao", "andamento", "em andamento"].includes(
+        String(c.status || "").toLowerCase()
+      )
+    ).length;
+
+    const finalizados = chamados.filter((c) =>
+      ["finalizado", "finalizada", "concluído", "concluido", "fechado", "encerrado"].includes(
+        String(c.status || "").toLowerCase()
+      )
+    ).length;
+
+    const criticos = chamados.filter((c) =>
+      String(c.prioridade || "").toLowerCase().includes("cr")
+    ).length;
+
+    const slaAtendido = total > 0 ? Math.round(((total - criticos) / total) * 100) : 0;
+
+    return {
+      total,
+      abertos,
+      execucao,
+      finalizados,
+      criticos,
+      slaAtendido,
+      porPrioridade: agrupar(chamados, "prioridade"),
+      porEstacao: agruparMultiCampo(chamados, ["localidade", "estacao", "unidade"]),
+      porEquipe: agruparMultiCampo(chamados, ["tecnico", "equipe", "responsavel"]),
+      porTipo: agruparMultiCampo(chamados, ["tipo_falha", "tipo", "categoria"]),
+      recentes: chamados.slice(0, 10),
+    };
+  }, [chamados]);
 
   async function exportarPDF() {
     setGerandoPdf(true);
-    setModal(null);
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -180,7 +199,6 @@ export default function EquipamentosPage() {
           useCORS: true,
           allowTaint: true,
           backgroundColor: "#ffffff",
-          letterRendering: false,
           logging: false,
           scrollX: 0,
           scrollY: 0,
@@ -196,79 +214,13 @@ export default function EquipamentosPage() {
         pdf.addImage(imgData, "PNG", 0, 0, largura, altura);
       }
 
-      pdf.save(`relatorio-equipamentos-${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`relatorio-analytics-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (error) {
       console.error(error);
       alert("Não foi possível gerar o PDF.");
     }
 
     setGerandoPdf(false);
-  }
-
-  function alterarQuantidade(index, tipo, quantidade) {
-    const qtd = Math.max(0, Number(quantidade || 0));
-
-    setEbaps((prev) =>
-      prev.map((ebap, i) => {
-        if (i !== index) return ebap;
-
-        const prefixo =
-          tipo === "bombas" ? "Bomba" : tipo === "rastelos" ? "Rastelo" : "Comporta";
-
-        const atuais = ebap[tipo];
-
-        const novaLista =
-          qtd > atuais.length
-            ? [
-                ...atuais,
-                ...Array.from({ length: qtd - atuais.length }, (_, idx) => ({
-                  id: `${tipo}-${atuais.length + idx + 1}`,
-                  nome: `${prefixo} ${String(atuais.length + idx + 1).padStart(2, "0")}`,
-                  status: "operando",
-                  observacao: "",
-                })),
-              ]
-            : atuais.slice(0, qtd);
-
-        return { ...ebap, [tipo]: novaLista };
-      })
-    );
-  }
-
-  function alterarStatusEquipamento(ebapIndex, tipo, equipamentoId, status) {
-    setEbaps((prev) =>
-      prev.map((ebap, i) => {
-        if (i !== ebapIndex) return ebap;
-
-        return {
-          ...ebap,
-          [tipo]: ebap[tipo].map((eq) =>
-            eq.id === equipamentoId
-              ? {
-                  ...eq,
-                  status,
-                  observacao: status === "operando" ? "" : eq.observacao,
-                }
-              : eq
-          ),
-        };
-      })
-    );
-  }
-
-  function alterarObservacaoEquipamento(ebapIndex, tipo, equipamentoId, observacao) {
-    setEbaps((prev) =>
-      prev.map((ebap, i) => {
-        if (i !== ebapIndex) return ebap;
-
-        return {
-          ...ebap,
-          [tipo]: ebap[tipo].map((eq) =>
-            eq.id === equipamentoId ? { ...eq, observacao } : eq
-          ),
-        };
-      })
-    );
   }
 
   return (
@@ -280,7 +232,6 @@ export default function EquipamentosPage() {
           top: 0;
           width: 1123px;
           height: auto;
-          opacity: 1;
           pointer-events: none;
           z-index: -10;
         }
@@ -319,46 +270,326 @@ export default function EquipamentosPage() {
           border-radius: 10px;
           overflow: hidden;
         }
+
+        .analytics-premium {
+          width: 100%;
+          color: #eaf3ff;
+          overflow-x: hidden;
+        }
+
+        .analytics-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 18px;
+        }
+
+        .analytics-title h1 {
+          margin: 0;
+          font-size: clamp(24px, 3vw, 36px);
+          font-weight: 950;
+          letter-spacing: .03em;
+          text-transform: uppercase;
+          line-height: 1.12;
+        }
+
+        .analytics-title span {
+          color: #00d9ff;
+          font-size: 13px;
+          font-weight: 950;
+          letter-spacing: .22em;
+          text-transform: uppercase;
+        }
+
+        .clock-card {
+          min-width: 150px;
+          padding: 15px 18px;
+          border-radius: 18px;
+          border: 1px solid rgba(30,155,255,.55);
+          background:
+            radial-gradient(circle at top right, rgba(30,155,255,.18), transparent 42%),
+            linear-gradient(180deg, rgba(8,29,54,.98), rgba(2,10,22,.98));
+          text-align: center;
+        }
+
+        .clock-card strong {
+          display: block;
+          font-size: 24px;
+          font-weight: 950;
+          color: white;
+        }
+
+        .clock-card small {
+          display: block;
+          margin-top: 3px;
+          color: #9fb1cc;
+          font-weight: 800;
+        }
+
+        .analytics-actions {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 18px;
+        }
+
+        .action-btn {
+          color: white;
+          border: none;
+          border-radius: 16px;
+          padding: 14px 22px;
+          font-weight: 900;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(160px, 1fr));
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        .kpi-card {
+          min-height: 96px;
+          padding: 18px;
+          border-radius: 16px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background:
+            radial-gradient(circle at right bottom, var(--glow-soft), transparent 38%),
+            linear-gradient(180deg, rgba(5,22,40,.96), rgba(2,10,20,.98));
+          box-shadow: 0 16px 45px rgba(0,0,0,.25);
+        }
+
+        .kpi-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .kpi-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          display: grid;
+          place-items: center;
+          font-size: 23px;
+          background: var(--bg);
+        }
+
+        .kpi-label {
+          color: #b8c7dd;
+          text-transform: uppercase;
+          font-size: 12px;
+          font-weight: 950;
+        }
+
+        .kpi-value {
+          margin-top: 6px;
+          font-size: 30px;
+          font-weight: 950;
+          line-height: 1;
+          color: white;
+        }
+
+        .kpi-sub {
+          margin-top: 6px;
+          color: #00e5ff;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .dash-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+
+        .dash-grid-bottom {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+
+        .panel {
+          border-radius: 16px;
+          border: 1px solid rgba(30,155,255,.55);
+          background:
+            radial-gradient(circle at top right, rgba(30,155,255,.10), transparent 36%),
+            linear-gradient(180deg, rgba(5,22,40,.96), rgba(1,8,18,.98));
+          padding: 18px;
+          min-height: 260px;
+          box-shadow: 0 16px 45px rgba(0,0,0,.22);
+          overflow: hidden;
+        }
+
+        .panel h3 {
+          margin: 0 0 14px;
+          font-size: 15px;
+          font-weight: 950;
+          text-transform: uppercase;
+          color: #f2f7ff;
+        }
+
+        .panel-foot {
+          color: #9fb1cc;
+          font-size: 12px;
+          margin-top: 10px;
+        }
+
+        .recent-list {
+          display: grid;
+          gap: 10px;
+        }
+
+        .recent-item {
+          display: grid;
+          grid-template-columns: 1fr auto auto;
+          gap: 10px;
+          align-items: center;
+          padding: 10px 0;
+          border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+
+        .recent-item strong {
+          font-size: 13px;
+        }
+
+        .recent-item small {
+          color: #9fb1cc;
+          display: block;
+          margin-top: 3px;
+        }
+
+        .priority-pill {
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 900;
+          border: 1px solid currentColor;
+        }
+
+        .sla-wrap {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .sla-number {
+          width: 170px;
+          height: 170px;
+          border-radius: 50%;
+          margin: auto;
+          display: grid;
+          place-items: center;
+          background:
+            radial-gradient(circle, #09213d 55%, transparent 56%),
+            conic-gradient(#1e9bff ${dados.slaAtendido}%, rgba(255,255,255,.08) 0);
+          box-shadow: 0 0 30px rgba(30,155,255,.25);
+        }
+
+        .sla-number strong {
+          font-size: 36px;
+          display: block;
+          text-align: center;
+        }
+
+        .sla-number span {
+          font-size: 11px;
+          color: #9fb1cc;
+          font-weight: 900;
+          display: block;
+          text-align: center;
+        }
+
+        .sla-meta {
+          display: grid;
+          gap: 12px;
+        }
+
+        .sla-meta div {
+          background: rgba(255,255,255,.045);
+          border: 1px solid rgba(255,255,255,.08);
+          border-radius: 14px;
+          padding: 12px;
+        }
+
+        .empty {
+          color: #9fb1cc;
+          padding: 20px;
+          text-align: center;
+        }
+
+        @media (max-width: 1300px) {
+          .kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .dash-grid,
+          .dash-grid-bottom {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+        }
+
+        @media (max-width: 600px) {
+          .analytics-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+          }
+
+          .action-btn {
+            justify-content: center;
+          }
+
+          .kpi-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .recent-item {
+            grid-template-columns: 1fr;
+          }
+
+          .sla-wrap {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
-      <div style={{ minHeight: "100vh", color: "#ecf3ff", fontFamily: "Inter, Arial, sans-serif" }}>
-        <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 950, margin: 0 }}>
-            Status de Equipamentos por EBAP
-          </h1>
+      <div className="analytics-premium">
+        <div className="analytics-header">
+          <div className="analytics-title">
+            <h1>PAINEL GERENCIAL — GESTÃO DE CHAMADOS</h1>
+            <span>Visão geral da operação em tempo real</span>
+          </div>
 
-          <p style={{ color: "#9fb1cc", marginTop: 8 }}>
-            Relatório de bombas, rastelos e comportas por unidade operacional.
-          </p>
+          <div className="clock-card">
+            <strong>
+              {agora.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+            </strong>
+            <small>{agora.toLocaleDateString("pt-BR")}</small>
+          </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, minmax(180px, 1fr))",
-            gap: 16,
-            marginBottom: 22,
-          }}
-        >
-          <TopCard title="EBAPs" value={ebaps.length} icon={<Building2 />} />
-          <TopCard title="Total" value={totais.total} icon={<Gauge />} />
-          <TopCard title="Operando" value={totais.operando} color="#38e66b" icon={<Activity />} />
-          <TopCard title="Atenção" value={totais.atencao} color="#ffc83d" icon={<AlertTriangle />} />
-          <TopCard title="Falha" value={totais.falha} color="#ff5148" icon={<ShieldAlert />} />
-        </div>
-
-        <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-          <button onClick={() => setEditando((v) => !v)} style={buttonStyle(editando)}>
-            <Save size={18} />
-            {editando ? "Salvar quantidades" : "Editar quantidades"}
-          </button>
-
+        <div className="analytics-actions">
           <button
             onClick={() => setPreviewAberto(true)}
-            style={{
-              ...buttonBase,
-              background: "linear-gradient(135deg, #0ea5e9, #0369a1)",
-            }}
+            className="action-btn"
+            style={{ background: "linear-gradient(135deg, #0ea5e9, #0369a1)" }}
           >
             <Eye size={18} />
             Pré-visualizar
@@ -367,8 +598,8 @@ export default function EquipamentosPage() {
           <button
             onClick={exportarPDF}
             disabled={gerandoPdf}
+            className="action-btn"
             style={{
-              ...buttonBase,
               background: "linear-gradient(135deg, #ff7a1a, #d85d00)",
               opacity: gerandoPdf ? 0.7 : 1,
             }}
@@ -378,79 +609,101 @@ export default function EquipamentosPage() {
           </button>
         </div>
 
-        <div
-          style={{
-            background: "rgba(8,22,43,.86)",
-            border: "1px solid rgba(130,170,220,.18)",
-            borderRadius: 24,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-              padding: "18px 22px",
-              background: "rgba(255,255,255,.035)",
-              color: "#b9c8df",
-              fontWeight: 900,
-              textTransform: "uppercase",
-              fontSize: 13,
-            }}
-          >
-            <div>EBAP</div>
-            <HeaderIcon icon={<PumpIcon size={34} />} label="Bombas" />
-            <HeaderIcon icon={<RakeIcon size={34} />} label="Rastelos" />
-            <HeaderIcon icon={<GateIcon size={34} />} label="Comportas" />
-          </div>
-
-          {ebaps.map((ebap, index) => (
-            <div
-              key={ebap.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-                gap: 14,
-                padding: 18,
-                borderTop: "1px solid rgba(130,170,220,.13)",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>{ebap.nome}</div>
-                <div style={{ color: "#7f91ad", fontSize: 13 }}>{ebap.id}</div>
-              </div>
-
-              <StatusCard
-                icon={<PumpIcon />}
-                lista={ebap.bombas}
-                editando={editando}
-                onQtdChange={(qtd) => alterarQuantidade(index, "bombas", qtd)}
-                onClick={() => setModal({ ebapIndex: index, tipo: "bombas", titulo: "Bombas" })}
-              />
-
-              <StatusCard
-                icon={<RakeIcon />}
-                lista={ebap.rastelos}
-                editando={editando}
-                onQtdChange={(qtd) => alterarQuantidade(index, "rastelos", qtd)}
-                onClick={() => setModal({ ebapIndex: index, tipo: "rastelos", titulo: "Rastelos" })}
-              />
-
-              <StatusCard
-                icon={<GateIcon />}
-                lista={ebap.comportas}
-                editando={editando}
-                onQtdChange={(qtd) => alterarQuantidade(index, "comportas", qtd)}
-                onClick={() => setModal({ ebapIndex: index, tipo: "comportas", titulo: "Comportas" })}
-              />
+        {carregando ? (
+          <div className="panel">Carregando analytics...</div>
+        ) : (
+          <>
+            <div className="kpi-grid">
+              <Kpi icon="📂" label="Chamados abertos" value={dados.abertos} sub="operação ativa" color={azul} />
+              <Kpi icon="⚙️" label="Em execução" value={dados.execucao} sub="em atendimento" color={amarelo} />
+              <Kpi icon="✅" label="Finalizados" value={dados.finalizados} sub="histórico geral" color={verde} />
+              <Kpi icon="🎯" label="SLA atendido" value={`${dados.slaAtendido}%`} sub="dados reais" color={roxo} />
+              <Kpi icon="🚨" label="Críticos" value={dados.criticos} sub="atenção imediata" color={vermelho} />
             </div>
-          ))}
-        </div>
+
+            <div className="dash-grid">
+              <Panel title="Chamados por prioridade">
+                {dados.porPrioridade.length ? (
+                  <ResponsiveContainer width="100%" height={210}>
+                    <PieChart>
+                      <Pie data={dados.porPrioridade} dataKey="value" nameKey="name" innerRadius={52} outerRadius={84} paddingAngle={2}>
+                        {dados.porPrioridade.map((entry, index) => (
+                          <Cell key={index} fill={prioridadeCores[entry.name] || azul} stroke="rgba(2,10,20,.98)" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="empty">Sem dados</div>
+                )}
+                <div className="panel-foot">Últimos registros</div>
+              </Panel>
+
+              <ChartPanel title="Chamados por estação" data={dados.porEstacao} color={azul} />
+              <ChartPanel title="Produtividade por equipe" data={dados.porEquipe} color={verde} />
+              <ChartPanel title="Chamados por tipo" data={dados.porTipo} color={laranja} />
+            </div>
+
+            <div className="dash-grid-bottom">
+              <Panel title="Chamados recentes">
+                <div className="recent-list">
+                  {dados.recentes.slice(0, 6).map((c, i) => {
+                    const prio = normalizar(c.prioridade, "Média");
+                    const cor = prioridadeCores[prio] || azul;
+
+                    return (
+                      <div className="recent-item" key={c.id || i}>
+                        <div>
+                          <strong>{c.codigo || c.titulo || `Chamado #${c.id || i + 1}`}</strong>
+                          <small>{c.localidade || c.estacao || c.unidade || "-"}</small>
+                        </div>
+
+                        <span className="priority-pill" style={{ color: cor, background: `${cor}22` }}>
+                          {prio}
+                        </span>
+
+                        <small>{formatarData(c.created_at)}</small>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              <Panel title="SLA - Acordos de nível de serviço">
+                <div className="sla-wrap">
+                  <div className="sla-number">
+                    <div>
+                      <strong>{dados.slaAtendido}%</strong>
+                      <span>SLA atendido</span>
+                    </div>
+                  </div>
+
+                  <div className="sla-meta">
+                    <div>
+                      <strong>Dentro do prazo</strong>
+                      <br />
+                      <span style={{ color: "#9fb1cc" }}>{dados.total - dados.criticos} chamados</span>
+                    </div>
+
+                    <div>
+                      <strong>Fora do prazo / críticos</strong>
+                      <br />
+                      <span style={{ color: vermelho }}>{dados.criticos} chamados</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="panel-foot">Indicador operacional</div>
+              </Panel>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="pdf-stage-hidden">
-        <RelatorioCompleto ebaps={ebaps} totais={totais} />
+        <RelatorioAnalytics dados={dados} chamados={chamados} />
       </div>
 
       {previewAberto && (
@@ -466,8 +719,12 @@ export default function EquipamentosPage() {
                 padding: "12px 18px",
                 fontWeight: 900,
                 cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
               }}
             >
+              <X size={18} />
               Fechar
             </button>
 
@@ -482,290 +739,73 @@ export default function EquipamentosPage() {
                 padding: "12px 18px",
                 fontWeight: 900,
                 cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
               }}
             >
+              <FileDown size={18} />
               {gerandoPdf ? "Gerando PDF..." : "Baixar PDF"}
             </button>
           </div>
 
           <div className="preview-page">
-            <RelatorioCompleto ebaps={ebaps} totais={totais} />
+            <RelatorioAnalytics dados={dados} chamados={chamados} />
           </div>
         </div>
-      )}
-
-      {modal && (
-        <DetalhesModal
-          ebap={ebaps[modal.ebapIndex]}
-          tipo={modal.tipo}
-          titulo={modal.titulo}
-          onClose={() => setModal(null)}
-          onStatusChange={(equipamentoId, status) =>
-            alterarStatusEquipamento(modal.ebapIndex, modal.tipo, equipamentoId, status)
-          }
-          onObservacaoChange={(equipamentoId, observacao) =>
-            alterarObservacaoEquipamento(modal.ebapIndex, modal.tipo, equipamentoId, observacao)
-          }
-        />
       )}
     </>
   );
 }
 
-const buttonBase = {
-  color: "white",
-  border: "none",
-  borderRadius: 16,
-  padding: "14px 22px",
-  fontWeight: 900,
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-};
-
-function buttonStyle(editando) {
-  return {
-    ...buttonBase,
-    background: editando
-      ? "linear-gradient(135deg, #14a44d, #0f7a34)"
-      : "linear-gradient(135deg, #2f7bff, #1658d1)",
-  };
-}
-
-function HeaderIcon({ icon, label }) {
+function ChartPanel({ title, data, color }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-      <span style={{ color: "#8ea3bd", opacity: 0.8 }}>{icon}</span>
-      <span>{label}</span>
-    </div>
+    <Panel title={title}>
+      <ResponsiveContainer width="100%" height={210}>
+        <BarChart data={data}>
+          <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
+          <XAxis dataKey="name" stroke="#9fb1cc" tick={{ fill: "#9fb1cc", fontSize: 11 }} tickLine={false} />
+          <YAxis stroke="#9fb1cc" allowDecimals={false} tick={{ fill: "#9fb1cc", fontSize: 12 }} tickLine={false} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: `${color}14` }} />
+          <Bar dataKey="value" fill={color} radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="panel-foot">Base: chamados registrados</div>
+    </Panel>
   );
 }
 
-function StatusCard({ lista, icon, editando, onQtdChange, onClick }) {
-  const r = resumo(lista);
-  const cfg = statusConfig[r.status];
-
+function Kpi({ icon, label, value, sub, color }) {
   return (
     <div
-      onClick={!editando ? onClick : undefined}
+      className="kpi-card"
       style={{
-        background: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        borderRadius: 18,
-        padding: "18px 20px",
-        minHeight: 120,
-        cursor: editando ? "default" : "pointer",
-        boxShadow: `0 0 28px ${cfg.bg}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
+        "--glow": color,
+        "--glow-soft": `${color}33`,
+        "--border": `${color}cc`,
       }}
     >
-      <div>
-        <div style={{ color: cfg.color, fontWeight: 900, fontSize: 18 }}>● {cfg.label}</div>
-
-        <div style={{ fontSize: 34, fontWeight: 950, marginTop: 8 }}>
-          {r.operando} / {r.total}
+      <div className="kpi-row">
+        <div className="kpi-icon" style={{ "--bg": `${color}22` }}>
+          {icon}
         </div>
 
-        <div style={{ color: "#9fb1cc", fontSize: 12, marginTop: 4 }}>
-          {r.operando} operando | {r.atencao} atenção | {r.falha} falha
+        <div>
+          <div className="kpi-label">{label}</div>
+          <div className="kpi-value">{value}</div>
+          <div className="kpi-sub">{sub}</div>
         </div>
-
-        {editando && (
-          <input
-            type="number"
-            min="0"
-            value={r.total}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onQtdChange(e.target.value)}
-            style={{
-              marginTop: 12,
-              width: 90,
-              height: 38,
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,.18)",
-              background: "rgba(0,0,0,.25)",
-              color: "white",
-              padding: "0 12px",
-              fontWeight: 900,
-            }}
-          />
-        )}
-      </div>
-
-      <div style={{ opacity: 0.42, width: 66, height: 66, display: "grid", placeItems: "center", color: "#d7e8ff" }}>
-        {icon}
       </div>
     </div>
   );
 }
 
-function TopCard({ title, value, icon, color = "#2f9bff" }) {
+function Panel({ title, children }) {
   return (
-    <div
-      style={{
-        background: "rgba(9,25,48,.82)",
-        border: "1px solid rgba(130,170,220,.18)",
-        borderRadius: 20,
-        padding: 18,
-      }}
-    >
-      <div style={{ color, marginBottom: 10 }}>{icon}</div>
-      <div style={{ color: "#9fb1cc", fontSize: 13 }}>{title}</div>
-      <div style={{ fontSize: 30, fontWeight: 950 }}>{value}</div>
-    </div>
-  );
-}
-
-function DetalhesModal({ ebap, tipo, titulo, onClose, onStatusChange, onObservacaoChange }) {
-  const lista = ebap[tipo];
-  const modalRef = useRef(null);
-
-  useEffect(() => {
-    function handleEsc(e) {
-      if (e.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", handleEsc);
-
-    setTimeout(() => {
-      modalRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 80);
-
-    return () => {
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,.72)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        overflowY: "auto",
-        zIndex: 9999,
-        padding: 24,
-      }}
-    >
-      <div
-        ref={modalRef}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "min(920px, calc(100vw - 40px))",
-          maxHeight: "86vh",
-          overflow: "auto",
-          background: "linear-gradient(180deg, #071b32, #04101f)",
-          border: "1px solid rgba(130,170,220,.25)",
-          borderRadius: 26,
-          padding: 24,
-          color: "white",
-          boxShadow: "0 30px 100px rgba(0,0,0,.55)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 22 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 28, fontWeight: 950 }}>
-              {titulo} - {ebap.nome}
-            </h2>
-
-            <p style={{ margin: "8px 0 0", color: "#9fb1cc" }}>
-              Lista individual dos equipamentos da unidade.
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            style={{
-              width: 46,
-              height: 46,
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,.14)",
-              background: "rgba(255,255,255,.08)",
-              color: "white",
-              cursor: "pointer",
-            }}
-          >
-            <X />
-          </button>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
-          {lista.map((eq) => {
-            const cfg = statusConfig[eq.status];
-
-            return (
-              <div
-                key={eq.id}
-                style={{
-                  background: cfg.bg,
-                  border: `1px solid ${cfg.border}`,
-                  borderRadius: 18,
-                  padding: 16,
-                }}
-              >
-                <div style={{ fontSize: 18, fontWeight: 950 }}>{eq.nome}</div>
-
-                <div style={{ marginTop: 8, color: cfg.color, fontWeight: 900 }}>
-                  ● {cfg.label}
-                </div>
-
-                <select
-                  value={eq.status}
-                  onChange={(e) => onStatusChange(eq.id, e.target.value)}
-                  style={{
-                    marginTop: 14,
-                    width: "100%",
-                    height: 42,
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,.16)",
-                    background: "#071426",
-                    color: "white",
-                    padding: "0 12px",
-                    fontWeight: 800,
-                  }}
-                >
-                  <option value="operando">🟢 Operando</option>
-                  <option value="atencao">🟡 Atenção</option>
-                  <option value="falha">🔴 Falha</option>
-                </select>
-
-                {eq.status !== "operando" && (
-                  <textarea
-                    value={eq.observacao || ""}
-                    onChange={(e) => onObservacaoChange(eq.id, e.target.value)}
-                    placeholder="Resumo da falha ou observação..."
-                    style={{
-                      marginTop: 12,
-                      width: "100%",
-                      minHeight: 72,
-                      resize: "none",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,.16)",
-                      background: "rgba(0,0,0,.22)",
-                      color: "white",
-                      padding: 12,
-                      fontSize: 13,
-                      outline: "none",
-                      boxSizing: "border-box",
-                      fontFamily: "inherit",
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+    <div className="panel">
+      <h3>{title}</h3>
+      {children}
     </div>
   );
 }
@@ -780,8 +820,6 @@ function ReportPage({ children, pageNumber, totalPages }) {
         background: "#ffffff",
         color: "#0f172a",
         padding: 38,
-        boxSizing: "border-box",
-        fontFamily: "Arial, Helvetica, sans-serif",
         position: "relative",
         overflow: "hidden",
       }}
@@ -804,51 +842,27 @@ function ReportPage({ children, pageNumber, totalPages }) {
   );
 }
 
-function RelatorioCompleto({ ebaps, totais }) {
-  const ebapsPorPagina = 7;
-  const paginasTabela = [];
-
-  for (let i = 0; i < ebaps.length; i += ebapsPorPagina) {
-    paginasTabela.push(ebaps.slice(i, i + ebapsPorPagina));
-  }
-
-  const totalPaginas = 1 + paginasTabela.length;
+function RelatorioAnalytics({ dados, chamados }) {
+  const totalPaginas = 3;
 
   return (
     <>
       <ReportPage pageNumber={1} totalPages={totalPaginas}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <img
-            src={LOGO_URL}
-            alt="Logo"
-            crossOrigin="anonymous"
-            style={{ width: 160, background: "white", borderRadius: 8, display: "block" }}
-          />
+        <HeaderPdf titulo="RELATÓRIO GERENCIAL" subtitulo="Analytics de chamados operacionais" />
 
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f", whiteSpace: "nowrap" }}>
-              {pdfText("RELATÓRIO OPERACIONAL")}
-            </div>
-
-            <div style={{ color: "#64748b", marginTop: 6, whiteSpace: "nowrap", fontSize: 16 }}>
-              {pdfText("Status de Equipamentos por EBAP")}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 60 }}>
+        <div style={{ marginTop: 54 }}>
           <div style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
-            {pdfText("RELATÓRIO DE")}
+            {pdfText("PAINEL DE")}
           </div>
 
           <div style={{ fontSize: 44, fontWeight: 900, color: "#0f2f5f", lineHeight: 1.1 }}>
-            {pdfText("EQUIPAMENTOS")}
+            {pdfText("CHAMADOS")}
           </div>
 
           <div style={{ marginTop: 22, width: 120, height: 5, background: "#1e9bff" }} />
 
           <div style={{ marginTop: 24, fontSize: 20, color: "#334155" }}>
-            {pdfText("Bombas, rastelos e comportas por unidade operacional.")}
+            {pdfText("Resumo executivo da operação, prioridades, equipes e SLA.")}
           </div>
 
           <div style={{ marginTop: 8, color: "#64748b", fontSize: 16 }}>
@@ -867,59 +881,133 @@ function RelatorioCompleto({ ebaps, totais }) {
             gap: 16,
           }}
         >
-          <PdfKpi titulo="EBAPs" valor={ebaps.length} detalhe="Unidades monitoradas" cor="#1e3a8a" />
-          <PdfKpi titulo="Equipamentos" valor={totais.total} detalhe="Total cadastrado" cor="#0891b2" />
-          <PdfKpi titulo="Operando" valor={totais.operando} detalhe="Funcionando" cor="#16a34a" />
-          <PdfKpi titulo="Atenção" valor={totais.atencao} detalhe="Acompanhamento" cor="#ca8a04" />
-          <PdfKpi titulo="Falha" valor={totais.falha} detalhe="Intervenção" cor="#dc2626" />
+          <PdfKpi titulo="Total" valor={dados.total} detalhe="Chamados registrados" cor="#1e3a8a" />
+          <PdfKpi titulo="Abertos" valor={dados.abertos} detalhe="Operação ativa" cor="#0284c7" />
+          <PdfKpi titulo="Em execução" valor={dados.execucao} detalhe="Em atendimento" cor="#ca8a04" />
+          <PdfKpi titulo="Finalizados" valor={dados.finalizados} detalhe="Histórico geral" cor="#16a34a" />
+          <PdfKpi titulo="Críticos" valor={dados.criticos} detalhe="Atenção imediata" cor="#dc2626" />
         </div>
       </ReportPage>
 
-      {paginasTabela.map((grupo, index) => (
-        <ReportPage key={index} pageNumber={index + 2} totalPages={totalPaginas}>
-          <div style={{ color: "#0f2f5f", margin: 0, fontSize: 30, fontWeight: 900 }}>
-            {pdfText("Resumo por EBAP")}
-          </div>
+      <ReportPage pageNumber={2} totalPages={totalPaginas}>
+        <HeaderPdf titulo="INDICADORES OPERACIONAIS" subtitulo="Distribuição por prioridade, estação, equipe e tipo" />
 
-          <table
-            style={{
-              marginTop: 24,
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: 13,
-              tableLayout: "fixed",
-            }}
-          >
-            <thead>
-              <tr style={{ background: "#0f2f5f", color: "white" }}>
-                <th style={{ ...th, width: "20%" }}>{pdfText("EBAP")}</th>
-                <th style={{ ...th, width: "19%" }}>{pdfText("Bombas")}</th>
-                <th style={{ ...th, width: "19%" }}>{pdfText("Rastelos")}</th>
-                <th style={{ ...th, width: "19%" }}>{pdfText("Comportas")}</th>
-                <th style={{ ...th, width: "23%" }}>{pdfText("Observações")}</th>
-              </tr>
-            </thead>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 18,
+            marginTop: 26,
+          }}
+        >
+          <PdfPanel titulo="Chamados por prioridade">
+            <PdfList dados={dados.porPrioridade} colorMap={prioridadeCores} />
+          </PdfPanel>
 
-            <tbody>
-              {grupo.map((ebap) => (
-                <tr key={ebap.id}>
-                  <td style={td}>
-                    <strong>{pdfText(ebap.nome)}</strong>
-                    <br />
-                    <span style={{ color: "#64748b", fontSize: 11 }}>{pdfText(ebap.id)}</span>
-                  </td>
+          <PdfPanel titulo="Chamados por estação">
+            <PdfBars dados={dados.porEstacao} cor="#1e9bff" />
+          </PdfPanel>
 
-                  <td style={td}>{renderPdfResumo(ebap.bombas)}</td>
-                  <td style={td}>{renderPdfResumo(ebap.rastelos)}</td>
-                  <td style={td}>{renderPdfResumo(ebap.comportas)}</td>
-                  <td style={td}>{renderObservacoes(ebap)}</td>
+          <PdfPanel titulo="Produtividade por equipe">
+            <PdfBars dados={dados.porEquipe} cor="#16a34a" />
+          </PdfPanel>
+
+          <PdfPanel titulo="Chamados por tipo">
+            <PdfBars dados={dados.porTipo} cor="#f59e0b" />
+          </PdfPanel>
+        </div>
+      </ReportPage>
+
+      <ReportPage pageNumber={3} totalPages={totalPaginas}>
+        <HeaderPdf titulo="CHAMADOS RECENTES E SLA" subtitulo="Últimos registros e status de atendimento" />
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.35fr .65fr",
+            gap: 18,
+            marginTop: 26,
+          }}
+        >
+          <PdfPanel titulo="Chamados recentes">
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: "#0f2f5f", color: "white" }}>
+                  <th style={th}>Chamado</th>
+                  <th style={th}>Local</th>
+                  <th style={th}>Prioridade</th>
+                  <th style={th}>Data</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </ReportPage>
-      ))}
+              </thead>
+
+              <tbody>
+                {dados.recentes.slice(0, 10).map((c, i) => (
+                  <tr key={c.id || i}>
+                    <td style={td}>{pdfText(c.codigo || c.titulo || `Chamado #${c.id || i + 1}`)}</td>
+                    <td style={td}>{pdfText(c.localidade || c.estacao || c.unidade || "-")}</td>
+                    <td style={td}>{pdfText(c.prioridade || "Média")}</td>
+                    <td style={td}>{pdfText(formatarData(c.created_at))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PdfPanel>
+
+          <PdfPanel titulo="SLA">
+            <div style={{ textAlign: "center", marginTop: 18 }}>
+              <div
+                style={{
+                  width: 180,
+                  height: 180,
+                  borderRadius: "50%",
+                  margin: "0 auto",
+                  border: "18px solid #1e9bff",
+                  display: "grid",
+                  placeItems: "center",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 42, fontWeight: 950, color: "#0f2f5f" }}>
+                    {dados.slaAtendido}%
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
+                    {pdfText("SLA atendido")}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 28, display: "grid", gap: 12 }}>
+                <PdfMiniBox label="Dentro do prazo" value={`${dados.total - dados.criticos} chamados`} color="#16a34a" />
+                <PdfMiniBox label="Fora do prazo / críticos" value={`${dados.criticos} chamados`} color="#dc2626" />
+              </div>
+            </div>
+          </PdfPanel>
+        </div>
+      </ReportPage>
     </>
+  );
+}
+
+function HeaderPdf({ titulo, subtitulo }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <img
+        src={LOGO_URL}
+        alt="Logo"
+        crossOrigin="anonymous"
+        style={{ width: 160, background: "white", borderRadius: 8, display: "block" }}
+      />
+
+      <div style={{ textAlign: "right" }}>
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#0f2f5f", whiteSpace: "nowrap" }}>
+          {pdfText(titulo)}
+        </div>
+
+        <div style={{ color: "#64748b", marginTop: 6, whiteSpace: "nowrap", fontSize: 16 }}>
+          {pdfText(subtitulo)}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -950,59 +1038,116 @@ function PdfKpi({ titulo, valor, detalhe, cor }) {
   );
 }
 
-function renderPdfResumo(lista) {
-  const r = resumo(lista);
-  const status = r.falha > 0 ? "Falha" : r.atencao > 0 ? "Atenção" : "Operando";
-  const color = r.falha > 0 ? "#dc2626" : r.atencao > 0 ? "#ca8a04" : "#15803d";
-
+function PdfPanel({ titulo, children }) {
   return (
-    <div>
-      <strong style={{ fontSize: 12 }}>
-        {r.operando}/{r.total}
-      </strong>
-
-      <div style={{ color, fontWeight: 800, fontSize: 13 }}>
-        {pdfText(status)}
+    <div
+      style={{
+        border: "1px solid #dbe3ef",
+        borderRadius: 16,
+        padding: 16,
+        minHeight: 245,
+      }}
+    >
+      <div style={{ fontSize: 17, color: "#0f2f5f", fontWeight: 900, marginBottom: 14 }}>
+        {pdfText(titulo)}
       </div>
-
-      <div style={{ color: "#64748b", fontSize: 10, whiteSpace: "nowrap" }}>
-        {pdfText(`${r.operando} op. | ${r.atencao} atenção | ${r.falha} falha`)}
-      </div>
+      {children}
     </div>
   );
 }
 
-function renderObservacoes(ebap) {
-  const todos = [...ebap.bombas, ...ebap.rastelos, ...ebap.comportas];
-  const obs = todos.filter((e) => e.status !== "operando" && e.observacao?.trim());
+function PdfBars({ dados, cor }) {
+  const max = Math.max(...dados.map((d) => d.value), 1);
 
-  if (!obs.length) {
-    return (
-      <div style={{ color: "#15803d", fontWeight: 800, whiteSpace: "nowrap" }}>
-        {pdfText("Sem ocorrências")}
-      </div>
-    );
-  }
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {dados.length ? (
+        dados.map((item, i) => (
+          <div key={i}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+              <strong>{pdfText(item.name)}</strong>
+              <span>{item.value}</span>
+            </div>
 
-  return obs.map((o) => (
-    <div key={o.id} style={{ marginBottom: 4 }}>
-      <strong>{pdfText(o.nome)}:</strong>{" "}
-      {pdfText(o.observacao)}
+            <div style={{ height: 10, borderRadius: 999, background: "#e2e8f0", overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${Math.max(8, (item.value / max) * 100)}%`,
+                  height: "100%",
+                  background: cor,
+                  borderRadius: 999,
+                }}
+              />
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={{ color: "#64748b" }}>{pdfText("Sem dados")}</div>
+      )}
     </div>
-  ));
+  );
+}
+
+function PdfList({ dados, colorMap }) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {dados.length ? (
+        dados.map((item, i) => {
+          const cor = colorMap[item.name] || "#1e9bff";
+
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: "1px solid #e2e8f0",
+                paddingBottom: 8,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 12, height: 12, borderRadius: "50%", background: cor, display: "inline-block" }} />
+                <strong>{pdfText(item.name)}</strong>
+              </div>
+
+              <strong style={{ color: cor }}>{item.value}</strong>
+            </div>
+          );
+        })
+      ) : (
+        <div style={{ color: "#64748b" }}>{pdfText("Sem dados")}</div>
+      )}
+    </div>
+  );
+}
+
+function PdfMiniBox({ label, value, color }) {
+  return (
+    <div
+      style={{
+        border: `1px solid ${color}`,
+        borderRadius: 14,
+        padding: 14,
+        textAlign: "left",
+      }}
+    >
+      <div style={{ color: "#475569", fontSize: 12, fontWeight: 900 }}>{pdfText(label)}</div>
+      <div style={{ color, fontSize: 20, fontWeight: 950 }}>{pdfText(value)}</div>
+    </div>
+  );
 }
 
 const th = {
-  padding: 12,
+  padding: 10,
   textAlign: "left",
   fontWeight: 800,
   whiteSpace: "nowrap",
 };
 
 const td = {
-  padding: "9px 12px",
+  padding: "9px 10px",
   borderBottom: "1px solid #dbe3ef",
   verticalAlign: "top",
-  wordBreak: "normal",
-  lineHeight: 1.15,
+  lineHeight: 1.2,
 };
