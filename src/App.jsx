@@ -36,21 +36,6 @@ export const statusOptions = [
 
 export const prioridadeOptions = ["Baixa", "Média", "Alta", "Crítica"];
 
-const estacoes = [
-  "EBAP Aribiri",
-  "EBAP Comportas",
-  "EBAP Foz da Costa",
-  "EBAP Cobilândia",
-  "EBAP Laranja",
-  "EBAP Marinho",
-  "EBAP Sitio de Batalha",
-  "EBAP Bigossi",
-  "EBAP Canal da Costa",
-  "EBAP Marilândia",
-  "EBAP Guaranhus",
-];
-
-
 export function podeExportar(perfil) {
   return ["prefeitura", "gestor"].includes(perfil);
 }
@@ -145,7 +130,7 @@ export function getBadgeStyle(colors, type, value) {
   };
 }
 
-function buildStyles(colors, darkMode) {
+function buildStyles(colors, darkMode, isMobile, menuAberto) {
   return {
     page: {
       minHeight: "100vh",
@@ -154,35 +139,65 @@ function buildStyles(colors, darkMode) {
         : "linear-gradient(180deg, #f4f7fb 0%, #edf3f9 100%)",
       fontFamily: "Inter, Arial, sans-serif",
       color: colors.text,
-      width: "100vw",
+      width: "100%",
+      maxWidth: "100vw",
       overflowX: "hidden",
     },
 
- shell: {
-  display: "block",
-  minHeight: "100vh",
-  width: "100%",
-},
+    shell: {
+      display: "flex",
+      minHeight: "100vh",
+      width: "100%",
+      overflowX: "hidden",
+    },
 
-  sidebar: {
-  background: `linear-gradient(180deg, ${colors.sidebar} 0%, ${colors.sidebarDark} 100%)`,
-  color: "white",
-  padding: "22px 16px",
-  display: "flex",
-  flexDirection: "column",
-  width: "230px",
-overflowY: "auto",
-scrollbarWidth: "none",
-  position: "fixed",
-  left: 0,
-  top: 0,
-  bottom: 0,
+    sidebar: {
+      background: `linear-gradient(180deg, ${colors.sidebar} 0%, ${colors.sidebarDark} 100%)`,
+      color: "white",
+      padding: "22px 16px",
+      display: "flex",
+      flexDirection: "column",
+      width: "230px",
+      minWidth: "230px",
+      overflowY: "auto",
+      scrollbarWidth: "none",
+      position: "fixed",
+      left: isMobile ? (menuAberto ? 0 : "-270px") : 0,
+      top: 0,
+      bottom: 0,
+      height: "100vh",
+      zIndex: 1000,
+      boxShadow: "12px 0 34px rgba(6,40,91,0.25)",
+      transition: "left .28s ease",
+    },
 
-  height: "100vh",
+    mobileMenuButton: {
+      display: isMobile ? "flex" : "none",
+      position: "fixed",
+      top: 12,
+      left: 12,
+      zIndex: 1200,
+      width: 46,
+      height: 46,
+      borderRadius: 14,
+      border: `1px solid ${colors.border}`,
+      background: colors.panelSolid,
+      color: colors.text,
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 24,
+      fontWeight: 900,
+      cursor: "pointer",
+      boxShadow: "0 12px 30px rgba(0,0,0,.25)",
+    },
 
-  zIndex: 10,
-  boxShadow: "12px 0 34px rgba(6,40,91,0.25)",
-},
+    mobileOverlay: {
+      display: isMobile && menuAberto ? "block" : "none",
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,.45)",
+      zIndex: 900,
+    },
 
     logoWrap: {
       background: "rgba(255,255,255,0.05)",
@@ -243,75 +258,80 @@ scrollbarWidth: "none",
       border: "1px solid rgba(255,255,255,0.09)",
     },
 
- main: {
-  marginLeft: "230px",
-  padding: "14px 18px",
-  minHeight: "100vh",
-  transform: "scale(0.88)",
-  transformOrigin: "top left",
-  width: "113.6%",
-},
+    main: {
+      marginLeft: isMobile ? 0 : "230px",
+      padding: isMobile ? "70px 12px 14px" : "18px",
+      minHeight: "100vh",
+      width: isMobile ? "100%" : "calc(100% - 230px)",
+      maxWidth: "100%",
+      overflowX: "hidden",
+      boxSizing: "border-box",
+    },
 
     container: {
       width: "100%",
       maxWidth: "100%",
-
       margin: 0,
       padding: 0,
       boxSizing: "border-box",
+      overflowX: "hidden",
     },
 
     topCard: {
       background: colors.panel,
       border: `1px solid ${colors.border}`,
-      borderRadius: "26px",
-      padding: "20px 24px",
+      borderRadius: isMobile ? "22px" : "26px",
+      padding: isMobile ? "16px" : "20px 24px",
       boxShadow: "0 20px 50px rgba(20,40,90,0.08)",
       display: "flex",
       justifyContent: "space-between",
-      alignItems: "center",
+      alignItems: isMobile ? "flex-start" : "center",
       gap: "18px",
       flexWrap: "wrap",
       marginBottom: "16px",
       width: "100%",
       boxSizing: "border-box",
+      overflow: "hidden",
     },
 
     topTitleWrap: {
       display: "flex",
-      gap: "16px",
+      gap: isMobile ? "12px" : "16px",
       alignItems: "flex-start",
       minWidth: 0,
       flex: 1,
+      width: isMobile ? "100%" : "auto",
     },
 
     topIcon: {
-      width: "52px",
-      height: "52px",
+      width: isMobile ? "44px" : "52px",
+      height: isMobile ? "44px" : "52px",
       borderRadius: "16px",
       border: `2px solid ${colors.primary}`,
       color: colors.primary,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      fontSize: "26px",
+      fontSize: isMobile ? "22px" : "26px",
       fontWeight: 800,
       flexShrink: 0,
     },
 
     title: {
       margin: 0,
-      fontSize: "clamp(26px, 2.3vw, 38px)",
+      fontSize: isMobile ? "24px" : "clamp(26px, 2.3vw, 38px)",
       fontWeight: 900,
       color: colors.text,
       lineHeight: 1.08,
       letterSpacing: "-0.02em",
+      wordBreak: "break-word",
     },
 
     subtitle: {
       marginTop: "8px",
       color: colors.muted,
-      fontSize: "16px",
+      fontSize: isMobile ? "14px" : "16px",
+      lineHeight: 1.4,
     },
 
     topActions: {
@@ -319,6 +339,7 @@ scrollbarWidth: "none",
       alignItems: "center",
       gap: "12px",
       flexWrap: "wrap",
+      width: isMobile ? "100%" : "auto",
     },
 
     profileChip: {
@@ -327,15 +348,16 @@ scrollbarWidth: "none",
       gap: "10px",
       border: `1px solid ${colors.border}`,
       borderRadius: "18px",
-      padding: "12px 16px",
+      padding: isMobile ? "10px 12px" : "12px 16px",
       background: colors.panelSolid,
       fontWeight: 800,
       color: colors.text,
+      maxWidth: "100%",
     },
 
     bellWrap: {
-      width: "52px",
-      height: "52px",
+      width: isMobile ? "46px" : "52px",
+      height: isMobile ? "46px" : "52px",
       borderRadius: "18px",
       border: `1px solid ${colors.border}`,
       display: "flex",
@@ -367,17 +389,20 @@ scrollbarWidth: "none",
       background: colors.panel,
       border: `1px solid ${colors.border}`,
       borderRadius: "24px",
-      padding: "22px",
+      padding: isMobile ? "16px" : "22px",
       boxShadow: "0 20px 50px rgba(20,40,90,0.08)",
       minWidth: 0,
       color: colors.text,
+      width: "100%",
+      boxSizing: "border-box",
+      overflowX: "hidden",
     },
 
     formCard: {
       background: colors.panel,
       border: `1px solid ${colors.border}`,
       borderRadius: "26px",
-      padding: "26px",
+      padding: isMobile ? "16px" : "26px",
       boxShadow: "0 20px 50px rgba(20,40,90,0.08)",
       marginBottom: "18px",
       width: "100%",
@@ -386,8 +411,8 @@ scrollbarWidth: "none",
 
     formGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-      gap: "22px",
+      gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(260px, 1fr))",
+      gap: isMobile ? "14px" : "22px",
       width: "100%",
     },
 
@@ -411,13 +436,13 @@ scrollbarWidth: "none",
 
     input: {
       width: "100%",
-      height: "62px",
+      height: isMobile ? "54px" : "62px",
       padding: "0 20px",
       borderRadius: "18px",
       border: `1px solid ${colors.border}`,
       background: colors.panelSolid,
       color: colors.text,
-      fontSize: "17px",
+      fontSize: isMobile ? "16px" : "17px",
       boxSizing: "border-box",
       outline: "none",
       minWidth: 0,
@@ -443,7 +468,7 @@ scrollbarWidth: "none",
       border: "none",
       borderRadius: "18px",
       padding: "0 28px",
-      minHeight: "62px",
+      minHeight: isMobile ? "54px" : "62px",
       display: "inline-flex",
       alignItems: "center",
       gap: "12px",
@@ -458,7 +483,7 @@ scrollbarWidth: "none",
       border: `1px solid ${colors.border}`,
       borderRadius: "18px",
       padding: "0 26px",
-      minHeight: "62px",
+      minHeight: isMobile ? "54px" : "62px",
       display: "inline-flex",
       alignItems: "center",
       gap: "12px",
@@ -498,6 +523,7 @@ scrollbarWidth: "none",
       marginBottom: "14px",
       cursor: "pointer",
       color: colors.text,
+      minWidth: 0,
     },
 
     badgeRow: {
@@ -518,7 +544,7 @@ scrollbarWidth: "none",
 
     softGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
       gap: "10px",
       marginTop: "14px",
     },
@@ -572,223 +598,120 @@ function LoginScreen({ authForm, setAuthForm, fazerLogin, mensagem, erro, styles
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        width: "100vw",
-        display: "grid",
-        placeItems: "center",
-        padding: 22,
-        boxSizing: "border-box",
-        background:
-          "radial-gradient(circle at top left, rgba(30,155,255,.35), transparent 34%), linear-gradient(135deg, #020b16 0%, #061a2f 45%, #020b16 100%)",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 1080,
-          display: "grid",
-          gridTemplateColumns: "1fr 470px",
-          gap: 28,
-          alignItems: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div style={{ color: "white", padding: 20 }}>
-          <img
-            src={LOGO_URL}
-            alt="Logo"
-            style={{
-              width: 220,
-              maxWidth: "100%",
-              background: "white",
-              borderRadius: 18,
-              padding: 8,
-              marginBottom: 28,
-            }}
-          />
-
-          <h1
-            style={{
-              fontSize: "clamp(34px, 4vw, 58px)",
-              lineHeight: 1.05,
-              margin: 0,
-              fontWeight: 950,
-              letterSpacing: "-0.04em",
-            }}
-          >
-            Gestão inteligente de chamados operacionais
-          </h1>
-
-          <p
-            style={{
-              color: "#b8c7dc",
-              fontSize: 18,
-              lineHeight: 1.6,
-              maxWidth: 560,
-              marginTop: 20,
-            }}
-          >
-            Controle chamados, equipes, fotos, comentários, status, funcionários e relatórios em uma plataforma corporativa.
-          </p>
-        </div>
-
-        <div
+    <div style={styles.loginWrap}>
+      <div style={styles.loginCard}>
+        <img
+          src={LOGO_URL}
+          alt="Logo"
           style={{
-            background: "rgba(255,255,255,.08)",
-            backdropFilter: "blur(22px)",
-            border: "1px solid rgba(255,255,255,.16)",
-            borderRadius: 30,
-            padding: 30,
-            boxShadow: "0 30px 80px rgba(0,0,0,.38)",
-            color: "white",
+            width: 220,
+            maxWidth: "100%",
+            background: "white",
+            borderRadius: 18,
+            padding: 8,
+            marginBottom: 22,
           }}
-        >
-          <div style={{ marginBottom: 24 }}>
-            <div
-              style={{
-                width: 58,
-                height: 58,
-                borderRadius: 18,
-                display: "grid",
-                placeItems: "center",
-                background: "linear-gradient(135deg, #1e9bff, #1658d1)",
-                fontSize: 28,
-                marginBottom: 16,
+        />
+
+        <h1 style={{ margin: 0, fontSize: 32, fontWeight: 950 }}>
+          Acessar sistema
+        </h1>
+
+        <p style={{ color: "#6e7c97", marginTop: 8 }}>
+          Entre com seu login corporativo.
+        </p>
+
+        {mensagem && (
+          <div
+            style={{
+              ...styles.info,
+              background: "rgba(48,209,88,.14)",
+              border: "1px solid rgba(48,209,88,.35)",
+              color: "#30d158",
+            }}
+          >
+            {mensagem}
+          </div>
+        )}
+
+        {erro && (
+          <div
+            style={{
+              ...styles.info,
+              background: "rgba(255,49,49,.14)",
+              border: "1px solid rgba(255,49,49,.35)",
+              color: "#ff3131",
+            }}
+          >
+            {erro}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gap: 14 }}>
+          <div>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>👤 Login</div>
+            <input
+              style={styles.input}
+              placeholder="Digite seu login"
+              value={authForm.login}
+              onChange={(e) => setAuthForm({ ...authForm, login: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleLogin();
               }}
-            >
-              🔐
-            </div>
-
-            <h2 style={{ margin: 0, fontSize: 30, fontWeight: 950 }}>
-              Acessar sistema
-            </h2>
-
-            <p style={{ color: "#9fb1cc", marginTop: 8, lineHeight: 1.5 }}>
-              Entre com seu login corporativo para continuar.
-            </p>
+            />
           </div>
 
-          {mensagem && (
-            <div
-              style={{
-                ...styles.info,
-                background: "rgba(48,209,88,.14)",
-                border: "1px solid rgba(48,209,88,.35)",
-                color: "#7cffaa",
-              }}
-            >
-              {mensagem}
-            </div>
-          )}
+          <div>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>🔑 Senha</div>
 
-          {erro && (
-            <div
-              style={{
-                ...styles.info,
-                background: "rgba(255,49,49,.14)",
-                border: "1px solid rgba(255,49,49,.35)",
-                color: "#ff8b8b",
-              }}
-            >
-              {erro}
-            </div>
-          )}
-
-          <div style={{ display: "grid", gap: 14 }}>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>👤 Login</div>
+            <div style={{ position: "relative" }}>
               <input
-                style={{
-                  ...styles.input,
-                  background: "rgba(2,11,22,.72)",
-                  color: "white",
-                  border: "1px solid rgba(255,255,255,.14)",
-                }}
-                placeholder="Digite seu login"
-                value={authForm.login}
-                onChange={(e) =>
-                  setAuthForm({ ...authForm, login: e.target.value })
-                }
+                type={mostrarSenha ? "text" : "password"}
+                style={{ ...styles.input, paddingRight: 64 }}
+                placeholder="Digite sua senha"
+                value={authForm.senha}
+                onChange={(e) => setAuthForm({ ...authForm, senha: e.target.value })}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleLogin();
                 }}
               />
+
+              <button
+                type="button"
+                onClick={() => setMostrarSenha((v) => !v)}
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  top: 10,
+                  height: 42,
+                  width: 42,
+                  borderRadius: 14,
+                  border: "1px solid rgba(0,0,0,.12)",
+                  background: "rgba(255,255,255,.08)",
+                  cursor: "pointer",
+                  fontSize: 18,
+                }}
+              >
+                {mostrarSenha ? "🙈" : "👁️"}
+              </button>
             </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>🔑 Senha</div>
-
-              <div style={{ position: "relative" }}>
-                <input
-                  type={mostrarSenha ? "text" : "password"}
-                  style={{
-                    ...styles.input,
-                    background: "rgba(2,11,22,.72)",
-                    color: "white",
-                    border: "1px solid rgba(255,255,255,.14)",
-                    paddingRight: 64,
-                  }}
-                  placeholder="Digite sua senha"
-                  value={authForm.senha}
-                  onChange={(e) =>
-                    setAuthForm({ ...authForm, senha: e.target.value })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleLogin();
-                  }}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setMostrarSenha((v) => !v)}
-                  style={{
-                    position: "absolute",
-                    right: 10,
-                    top: 10,
-                    height: 42,
-                    width: 42,
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,.12)",
-                    background: "rgba(255,255,255,.08)",
-                    color: "white",
-                    cursor: "pointer",
-                    fontSize: 18,
-                  }}
-                >
-                  {mostrarSenha ? "🙈" : "👁️"}
-                </button>
-              </div>
-            </div>
-
-            <button
-              style={{
-                ...styles.primaryButton,
-                width: "100%",
-                justifyContent: "center",
-                marginTop: 8,
-                opacity: entrando ? 0.75 : 1,
-              }}
-              onClick={handleLogin}
-              disabled={entrando}
-            >
-              {entrando ? "Entrando..." : "🚀 Entrar no sistema"}
-            </button>
           </div>
+
+          <button
+            style={{
+              ...styles.primaryButton,
+              width: "100%",
+              justifyContent: "center",
+              marginTop: 8,
+              opacity: entrando ? 0.75 : 1,
+            }}
+            onClick={handleLogin}
+            disabled={entrando}
+          >
+            {entrando ? "Entrando..." : "🚀 Entrar no sistema"}
+          </button>
         </div>
       </div>
-
-      <style>{`
-        @media (max-width: 900px) {
-          div[style*="grid-template-columns: 1fr 470px"] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
@@ -801,14 +724,19 @@ export default function App() {
     () => localStorage.getItem("dark_theme") === "true"
   );
 
-  const colors = darkMode ? darkTheme : lightTheme;
-  const styles = useMemo(() => buildStyles(colors, darkMode), [colors, darkMode]);
-
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
 
   const isMobile = viewportWidth <= 900;
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  const colors = darkMode ? darkTheme : lightTheme;
+
+  const styles = useMemo(
+    () => buildStyles(colors, darkMode, isMobile, menuAberto),
+    [colors, darkMode, isMobile, menuAberto]
+  );
 
   const [usuario, setUsuario] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -829,9 +757,14 @@ export default function App() {
 
   useEffect(() => {
     const handleResize = () => setViewportWidth(window.innerWidth);
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    setMenuAberto(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const salvo = sessionStorage.getItem("usuario_sistema_logado");
@@ -983,7 +916,6 @@ export default function App() {
         mensagem={mensagem}
         erro={erro}
         styles={styles}
-        colors={colors}
       />
     );
   }
@@ -992,160 +924,180 @@ export default function App() {
   const notificacoesNaoLidas = notificacoes.filter((item) => !item.lida).length;
 
   return (
-    <Layout
-      usuario={usuario}
-      colors={colors}
-      styles={styles}
-      isMobile={isMobile}
-      currentPath={currentPath}
-      darkMode={darkMode}
-      setDarkMode={setDarkMode}
-      notificacoesNaoLidas={notificacoesNaoLidas}
-      mostrarNotificacoes={mostrarNotificacoes}
-      setMostrarNotificacoes={setMostrarNotificacoes}
-      marcarNotificacoesComoLidas={marcarNotificacoesComoLidas}
-      notificacoes={notificacoes}
-      exportarChamados={exportarChamados}
-      sair={sair}
-      mensagem={mensagem}
-      erro={erro}
-    >
-      <Routes>
-        <Route path="/" element={<Navigate to="/painel" replace />} />
-        <Route path="/login" element={<Navigate to="/painel" replace />} />
-<Route
-  path="/ferias"
-  element={
-    usuario?.perfil === "gestor" ? (
-      <FeriasPage
-        styles={styles}
-        colors={colors}
+    <>
+      {isMobile && (
+        <>
+          <button
+            type="button"
+            style={styles.mobileMenuButton}
+            onClick={() => setMenuAberto((v) => !v)}
+          >
+            ☰
+          </button>
+
+          <div
+            style={styles.mobileOverlay}
+            onClick={() => setMenuAberto(false)}
+          />
+        </>
+      )}
+
+      <Layout
         usuario={usuario}
-      />
-    ) : (
-      <Navigate to="/painel" replace />
-    )
-  }
-/>
-        <Route
-          path="/painel"
-          element={
-            <PainelGerencialPage
-              styles={styles}
-              colors={colors}
-              tickets={tickets}
-              loading={loading}
-            />
-          }
-        />
-
-        <Route
-          path="/abertura"
-          element={
-            <AberturaPage
-              styles={styles}
-              colors={colors}
-              usuario={usuario}
-              equipes={equipes}
-              carregarChamados={carregarChamados}
-            />
-          }
-        />
-
-        <Route
-          path="/chamados"
-          element={
-            <ChamadosPage
-              styles={styles}
-              colors={colors}
-              tickets={tickets}
-              loading={loading}
-              setSelecionado={setSelecionado}
-            />
-          }
-        />
-
-        <Route
-          path="/chamados/:id"
-          element={
-            <DetalheChamadoPage
-              styles={styles}
-              colors={colors}
-              selecionado={selecionado}
-              usuario={usuario}
-              carregarChamados={carregarChamados}
-            />
-          }
-        />
-
-        <Route
-          path="/operador"
-          element={
-            <OperadorPage
-              styles={styles}
-              colors={colors}
-              tickets={tickets}
-            />
-          }
-        />
-
-        <Route
-          path="/analytics"
-          element={
-            <AnalyticsPage
-              styles={styles}
-              colors={colors}
-              tickets={tickets}
-            />
-          }
-        />
-
-       
-         <Route
-  path="/funcionarios"
-  element={
-    usuario?.perfil === "gestor" ? (
-      <FuncionariosPage
-        styles={styles}
         colors={colors}
-        usuario={usuario}
-      />
-    ) : (
-      <Navigate to="/painel" replace />
-    )
-  }
-/>
-<Route
-  path="/equipamentos"
-  element={
-    <EquipamentosPage
-      styles={styles}
-      colors={colors}
-      usuario={usuario}
-    />
-  }
-/>
-<Route
-  path="/ebap-status"
-  element={
-    <EBAPStatusPage />
-  }
-/>
-        <Route
-          path="/admin"
-          element={
-            <AdminPage
-              styles={styles}
-              colors={colors}
-              usuario={usuario}
-              equipes={equipes}
-              carregarEquipes={carregarEquipes}
-            />
-          }
-        />
+        styles={styles}
+        isMobile={isMobile}
+        menuAberto={menuAberto}
+        setMenuAberto={setMenuAberto}
+        currentPath={currentPath}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        notificacoesNaoLidas={notificacoesNaoLidas}
+        mostrarNotificacoes={mostrarNotificacoes}
+        setMostrarNotificacoes={setMostrarNotificacoes}
+        marcarNotificacoesComoLidas={marcarNotificacoesComoLidas}
+        notificacoes={notificacoes}
+        exportarChamados={exportarChamados}
+        sair={sair}
+        mensagem={mensagem}
+        erro={erro}
+      >
+        <Routes>
+          <Route path="/" element={<Navigate to="/painel" replace />} />
+          <Route path="/login" element={<Navigate to="/painel" replace />} />
 
-        <Route path="*" element={<Navigate to="/painel" replace />} />
-      </Routes>
-    </Layout>
+          <Route
+            path="/painel"
+            element={
+              <PainelGerencialPage
+                styles={styles}
+                colors={colors}
+                tickets={tickets}
+                loading={loading}
+              />
+            }
+          />
+
+          <Route
+            path="/abertura"
+            element={
+              <AberturaPage
+                styles={styles}
+                colors={colors}
+                usuario={usuario}
+                equipes={equipes}
+                carregarChamados={carregarChamados}
+              />
+            }
+          />
+
+          <Route
+            path="/chamados"
+            element={
+              <ChamadosPage
+                styles={styles}
+                colors={colors}
+                tickets={tickets}
+                loading={loading}
+                setSelecionado={setSelecionado}
+              />
+            }
+          />
+
+          <Route
+            path="/chamados/:id"
+            element={
+              <DetalheChamadoPage
+                styles={styles}
+                colors={colors}
+                selecionado={selecionado}
+                usuario={usuario}
+                carregarChamados={carregarChamados}
+              />
+            }
+          />
+
+          <Route
+            path="/operador"
+            element={
+              <OperadorPage
+                styles={styles}
+                colors={colors}
+                tickets={tickets}
+              />
+            }
+          />
+
+          <Route
+            path="/analytics"
+            element={
+              <AnalyticsPage
+                styles={styles}
+                colors={colors}
+                tickets={tickets}
+              />
+            }
+          />
+
+          <Route
+            path="/funcionarios"
+            element={
+              usuario?.perfil === "gestor" ? (
+                <FuncionariosPage
+                  styles={styles}
+                  colors={colors}
+                  usuario={usuario}
+                />
+              ) : (
+                <Navigate to="/painel" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/ferias"
+            element={
+              usuario?.perfil === "gestor" ? (
+                <FeriasPage
+                  styles={styles}
+                  colors={colors}
+                  usuario={usuario}
+                />
+              ) : (
+                <Navigate to="/painel" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/equipamentos"
+            element={
+              <EquipamentosPage
+                styles={styles}
+                colors={colors}
+                usuario={usuario}
+              />
+            }
+          />
+
+          <Route path="/ebap-status" element={<EBAPStatusPage />} />
+
+          <Route
+            path="/admin"
+            element={
+              <AdminPage
+                styles={styles}
+                colors={colors}
+                usuario={usuario}
+                equipes={equipes}
+                carregarEquipes={carregarEquipes}
+              />
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/painel" replace />} />
+        </Routes>
+      </Layout>
+    </>
   );
 }
