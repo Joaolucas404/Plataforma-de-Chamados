@@ -274,6 +274,88 @@ export default function EquipamentosPage() {
   return (
     <>
       <style>{`
+        .equip-page {
+          min-height: 100vh;
+          color: #ecf3ff;
+          font-family: Inter, Arial, sans-serif;
+          width: 100%;
+          max-width: 100%;
+          overflow-x: hidden;
+        }
+
+        .equip-title h1 {
+          font-size: clamp(24px, 3vw, 32px);
+          font-weight: 950;
+          margin: 0;
+          line-height: 1.15;
+        }
+
+        .equip-title p {
+          color: #9fb1cc;
+          margin-top: 8px;
+          line-height: 1.45;
+        }
+
+        .equip-top-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(150px, 1fr));
+          gap: 16px;
+          margin-bottom: 22px;
+        }
+
+        .equip-actions {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 18px;
+          flex-wrap: wrap;
+        }
+
+        .equip-table {
+          background: rgba(8,22,43,.86);
+          border: 1px solid rgba(130,170,220,.18);
+          border-radius: 24px;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .equip-header,
+        .equip-row {
+          display: grid;
+          grid-template-columns: 1.1fr 1fr 1fr 1fr;
+        }
+
+        .equip-header {
+          padding: 18px 22px;
+          background: rgba(255,255,255,.035);
+          color: #b9c8df;
+          font-weight: 900;
+          text-transform: uppercase;
+          font-size: 13px;
+        }
+
+        .equip-row {
+          gap: 14px;
+          padding: 18px;
+          border-top: 1px solid rgba(130,170,220,.13);
+          align-items: center;
+        }
+
+        .ebap-name {
+          font-size: 18px;
+          font-weight: 900;
+          word-break: break-word;
+        }
+
+        .ebap-id {
+          color: #7f91ad;
+          font-size: 13px;
+          margin-top: 4px;
+        }
+
+        .status-card {
+          min-width: 0;
+        }
+
         .pdf-stage-hidden {
           position: fixed;
           left: -20000px;
@@ -319,27 +401,72 @@ export default function EquipamentosPage() {
           border-radius: 10px;
           overflow: hidden;
         }
+
+        @media (max-width: 1100px) {
+          .equip-top-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .equip-table {
+            background: transparent;
+            border: none;
+            overflow: visible;
+          }
+
+          .equip-header {
+            display: none;
+          }
+
+          .equip-row {
+            grid-template-columns: 1fr;
+            gap: 14px;
+            padding: 16px;
+            margin-bottom: 18px;
+            border: 1px solid rgba(130,170,220,.18);
+            border-radius: 22px;
+            background: rgba(8,22,43,.86);
+          }
+
+          .ebap-name {
+            font-size: 21px;
+          }
+        }
+
+        @media (max-width: 620px) {
+          .equip-top-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .equip-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+          }
+
+          .equip-actions button {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .preview-overlay {
+            padding: 14px;
+          }
+
+          .preview-page {
+            transform: scale(.32);
+            transform-origin: top left;
+            margin-left: 0;
+            margin-bottom: -500px;
+          }
+        }
       `}</style>
 
-      <div style={{ minHeight: "100vh", color: "#ecf3ff", fontFamily: "Inter, Arial, sans-serif" }}>
-        <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 950, margin: 0 }}>
-            Status de Equipamentos por EBAP
-          </h1>
-
-          <p style={{ color: "#9fb1cc", marginTop: 8 }}>
-            Relatório de bombas, rastelos e comportas por unidade operacional.
-          </p>
+      <div className="equip-page">
+        <div className="equip-title" style={{ marginBottom: 22 }}>
+          <h1>Status de Equipamentos por EBAP</h1>
+          <p>Relatório de bombas, rastelos e comportas por unidade operacional.</p>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, minmax(180px, 1fr))",
-            gap: 16,
-            marginBottom: 22,
-          }}
-        >
+        <div className="equip-top-grid">
           <TopCard title="EBAPs" value={ebaps.length} icon={<Building2 />} />
           <TopCard title="Total" value={totais.total} icon={<Gauge />} />
           <TopCard title="Operando" value={totais.operando} color="#38e66b" icon={<Activity />} />
@@ -347,7 +474,7 @@ export default function EquipamentosPage() {
           <TopCard title="Falha" value={totais.falha} color="#ff5148" icon={<ShieldAlert />} />
         </div>
 
-        <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="equip-actions">
           <button onClick={() => setEditando((v) => !v)} style={buttonStyle(editando)}>
             <Save size={18} />
             {editando ? "Salvar quantidades" : "Editar quantidades"}
@@ -378,26 +505,8 @@ export default function EquipamentosPage() {
           </button>
         </div>
 
-        <div
-          style={{
-            background: "rgba(8,22,43,.86)",
-            border: "1px solid rgba(130,170,220,.18)",
-            borderRadius: 24,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-              padding: "18px 22px",
-              background: "rgba(255,255,255,.035)",
-              color: "#b9c8df",
-              fontWeight: 900,
-              textTransform: "uppercase",
-              fontSize: 13,
-            }}
-          >
+        <div className="equip-table">
+          <div className="equip-header">
             <div>EBAP</div>
             <HeaderIcon icon={<PumpIcon size={34} />} label="Bombas" />
             <HeaderIcon icon={<RakeIcon size={34} />} label="Rastelos" />
@@ -405,20 +514,10 @@ export default function EquipamentosPage() {
           </div>
 
           {ebaps.map((ebap, index) => (
-            <div
-              key={ebap.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.1fr 1fr 1fr 1fr",
-                gap: 14,
-                padding: 18,
-                borderTop: "1px solid rgba(130,170,220,.13)",
-                alignItems: "center",
-              }}
-            >
+            <div key={ebap.id} className="equip-row">
               <div>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>{ebap.nome}</div>
-                <div style={{ color: "#7f91ad", fontSize: 13 }}>{ebap.id}</div>
+                <div className="ebap-name">{ebap.nome}</div>
+                <div className="ebap-id">{ebap.id}</div>
               </div>
 
               <StatusCard
@@ -548,6 +647,7 @@ function StatusCard({ lista, icon, editando, onQtdChange, onClick }) {
 
   return (
     <div
+      className="status-card"
       onClick={!editando ? onClick : undefined}
       style={{
         background: cfg.bg,
@@ -560,16 +660,17 @@ function StatusCard({ lista, icon, editando, onQtdChange, onClick }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        gap: 14,
       }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{ color: cfg.color, fontWeight: 900, fontSize: 18 }}>● {cfg.label}</div>
 
         <div style={{ fontSize: 34, fontWeight: 950, marginTop: 8 }}>
           {r.operando} / {r.total}
         </div>
 
-        <div style={{ color: "#9fb1cc", fontSize: 12, marginTop: 4 }}>
+        <div style={{ color: "#9fb1cc", fontSize: 12, marginTop: 4, lineHeight: 1.35 }}>
           {r.operando} operando | {r.atencao} atenção | {r.falha} falha
         </div>
 
@@ -595,7 +696,7 @@ function StatusCard({ lista, icon, editando, onQtdChange, onClick }) {
         )}
       </div>
 
-      <div style={{ opacity: 0.42, width: 66, height: 66, display: "grid", placeItems: "center", color: "#d7e8ff" }}>
+      <div style={{ opacity: 0.42, width: 66, height: 66, display: "grid", placeItems: "center", color: "#d7e8ff", flexShrink: 0 }}>
         {icon}
       </div>
     </div>
@@ -610,6 +711,7 @@ function TopCard({ title, value, icon, color = "#2f9bff" }) {
         border: "1px solid rgba(130,170,220,.18)",
         borderRadius: 20,
         padding: 18,
+        minWidth: 0,
       }}
     >
       <div style={{ color, marginBottom: 10 }}>{icon}</div>
@@ -654,27 +756,27 @@ function DetalhesModal({ ebap, tipo, titulo, onClose, onStatusChange, onObservac
         alignItems: "center",
         overflowY: "auto",
         zIndex: 9999,
-        padding: 24,
+        padding: 16,
       }}
     >
       <div
         ref={modalRef}
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "min(920px, calc(100vw - 40px))",
+          width: "min(920px, calc(100vw - 24px))",
           maxHeight: "86vh",
           overflow: "auto",
           background: "linear-gradient(180deg, #071b32, #04101f)",
           border: "1px solid rgba(130,170,220,.25)",
           borderRadius: 26,
-          padding: 24,
+          padding: 20,
           color: "white",
           boxShadow: "0 30px 100px rgba(0,0,0,.55)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 22 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 28, fontWeight: 950 }}>
+            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 950 }}>
               {titulo} - {ebap.nome}
             </h2>
 
@@ -693,6 +795,7 @@ function DetalhesModal({ ebap, tipo, titulo, onClose, onStatusChange, onObservac
               background: "rgba(255,255,255,.08)",
               color: "white",
               cursor: "pointer",
+              flexShrink: 0,
             }}
           >
             <X />
@@ -986,8 +1089,7 @@ function renderObservacoes(ebap) {
 
   return obs.map((o) => (
     <div key={o.id} style={{ marginBottom: 4 }}>
-      <strong>{pdfText(o.nome)}:</strong>{" "}
-      {pdfText(o.observacao)}
+      <strong>{pdfText(o.nome)}:</strong> {pdfText(o.observacao)}
     </div>
   ));
 }
