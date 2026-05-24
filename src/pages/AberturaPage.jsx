@@ -355,14 +355,13 @@ export default function AberturaPage({
         <div style={styles.label}>📸 Fotos do chamado</div>
 
         <input
-          id="input-fotos-abertura"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          onChange={selecionarFotos}
-          style={{ display: "none" }}
-        />
+  id="input-fotos-abertura"
+  type="file"
+  accept="image/*"
+  multiple
+  onChange={selecionarFotos}
+  style={{ display: "none" }}
+/>
 
         <button
           type="button"
