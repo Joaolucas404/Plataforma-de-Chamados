@@ -71,16 +71,20 @@ export default function AberturaPage({
     setForm((atual) => ({ ...atual, [campo]: valor }));
   }
 
-  function selecionarFotos(event) {
+  function handleImagem(event) {
     const arquivos = Array.from(event.target.files || []);
+
+    if (!arquivos.length) return;
 
     if (fotos.length + arquivos.length > 4) {
       setErro("Máximo de 4 fotos por chamado.");
+      event.target.value = "";
       return;
     }
 
     setErro("");
     setFotos((atual) => [...atual, ...arquivos]);
+    event.target.value = "";
   }
 
   function removerFoto(index) {
@@ -275,7 +279,6 @@ export default function AberturaPage({
             <option>Elétrica</option>
             <option>Automação</option>
             <option>Limpeza</option>
-            
           </select>
         </div>
 
@@ -355,28 +358,55 @@ export default function AberturaPage({
         <div style={styles.label}>📸 Fotos do chamado</div>
 
         <input
-  id="input-fotos-abertura"
-  type="file"
-  accept="image/*"
-  multiple
-  onChange={selecionarFotos}
-  style={{ display: "none" }}
-/>
+          id="input-fotos-galeria"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImagem}
+          style={{ display: "none" }}
+        />
 
-        <button
-          type="button"
-          style={styles.secondaryButton}
-          onClick={() =>
-            document.getElementById("input-fotos-abertura").click()
-          }
-          disabled={fotos.length >= 4}
+        <input
+          id="input-fotos-camera"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImagem}
+          style={{ display: "none" }}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
         >
-          📷 Adicionar fotos
-        </button>
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={() =>
+              document.getElementById("input-fotos-galeria")?.click()
+            }
+            disabled={fotos.length >= 4}
+          >
+            🖼️ Escolher da galeria
+          </button>
 
-        <span style={{ marginLeft: 12, color: colors.muted }}>
-          {fotos.length}/4 fotos
-        </span>
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={() =>
+              document.getElementById("input-fotos-camera")?.click()
+            }
+            disabled={fotos.length >= 4}
+          >
+            📷 Tirar foto
+          </button>
+
+          <span style={{ color: colors.muted }}>{fotos.length}/4 fotos</span>
+        </div>
 
         {fotos.length > 0 && (
           <div
@@ -388,7 +418,7 @@ export default function AberturaPage({
             }}
           >
             {fotos.map((foto, index) => (
-              <div key={index} style={{ position: "relative" }}>
+              <div key={`${foto.name}-${index}`} style={{ position: "relative" }}>
                 <img
                   src={URL.createObjectURL(foto)}
                   alt="Prévia"
